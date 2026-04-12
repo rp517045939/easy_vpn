@@ -17,6 +17,18 @@ NGINX_CONF="/etc/nginx/sites-enabled/easy_vpn.conf"
 cd "$PROJECT_DIR"
 info "项目目录：$PROJECT_DIR"
 
+# ---------- 0. 拉取最新代码 ----------
+info "===== 拉取最新代码 ====="
+if git -C "$PROJECT_DIR" remote get-url origin &>/dev/null; then
+    if git -C "$PROJECT_DIR" pull --timeout 30 origin main 2>&1; then
+        info "代码已更新到最新版本 ✓"
+    else
+        warning "git pull 失败（网络问题或已是最新），继续使用当前版本"
+    fi
+else
+    warning "未找到 git remote，跳过更新步骤"
+fi
+
 # ---------- 1. 基础检查 ----------
 command -v docker        &>/dev/null || die "未找到 docker，请先安装"
 command -v nginx         &>/dev/null || die "未找到 nginx"
