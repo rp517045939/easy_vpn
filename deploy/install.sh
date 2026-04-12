@@ -162,24 +162,56 @@ else
 fi
 
 # =============================================================================
-# 第五步：SSL 证书
+# 第五步：SSL 证书 + 自动续期
 # =============================================================================
 info "===== 第五步：SSL 证书 ====="
 
 # 从 Nginx 配置里提取域名
 DOMAIN=$(grep 'server_name' "$NGINX_CONF_FILE" | head -1 | awk '{print $2}' | tr -d ';')
 
+# --- 5.1 设置 renewal deploy hook（所有证书续期成功后执行，graceful reload）---
+# 说明：certbot renew 每天自动跑两次，续期成功后需要 reload nginx 让新证书生效。
+# deploy hook 对服务器上所有证书生效，是统一入口，避免每个证书单独配置。
+# 使用 nginx -s reload（graceful），不中断现有连接，不影响 Gitea 等其他服务。
+HOOK_FILE="/etc/letsencrypt/renewal-hooks/deploy/nginx-reload.sh"
+if [ ! -f "$HOOK_FILE" ]; then
+    sudo bash -c "cat > $HOOK_FILE" << 'EOF'
+#!/bin/bash
+# certbot 证书续期成功后自动执行，graceful reload nginx
+# 所有域名（包括 Gitea、个人主页、easy_vpn）共用此 hook
+nginx -s reload
+EOF
+    sudo chmod +x "$HOOK_FILE"
+    info "已创建续期 hook：$HOOK_FILE"
+else
+    info "续期 hook 已存在，跳过：$HOOK_FILE"
+fi
+
+# --- 5.2 申请证书 ---
 if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
     info "SSL 证书已存在，跳过申请：/etc/letsencrypt/live/${DOMAIN}/"
 elif [ "$HAS_CERTBOT" = true ]; then
     info "申请 SSL 证书：$DOMAIN"
-    sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
-        --email "$(grep 'ADMIN_USERNAME' .env | cut -d'=' -f2-)@$(echo $DOMAIN | cut -d'.' -f2-)" \
+    ADMIN_EMAIL="$(grep '^ADMIN_USERNAME' .env | cut -d'=' -f2-)@$(echo "$DOMAIN" | cut -d'.' -f2-)"
+    sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$ADMIN_EMAIL" \
         || warning "SSL 证书申请失败，请手动执行：sudo certbot --nginx -d $DOMAIN"
 else
     warning "未安装 certbot，请手动申请 SSL 证书："
     echo "  sudo apt install certbot python3-certbot-nginx"
     echo "  sudo certbot --nginx -d $DOMAIN"
+    echo ""
+    echo "  申请成功后，请确认续期 hook 已创建："
+    echo "  $HOOK_FILE"
+fi
+
+# --- 5.3 验证自动续期配置正常（dry-run，不真正申请）---
+if [ "$HAS_CERTBOT" = true ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+    info "验证自动续期配置（dry-run）..."
+    if sudo certbot renew --dry-run --cert-name "$DOMAIN" &>/dev/null 2>&1; then
+        info "自动续期验证通过（certbot timer 每天自动运行两次）"
+    else
+        warning "自动续期 dry-run 失败，请手动检查：sudo certbot renew --dry-run"
+    fi
 fi
 
 # =============================================================================
