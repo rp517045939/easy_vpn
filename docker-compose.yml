@@ -5,16 +5,17 @@ services:
     container_name: easy_vpn
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:8080"   # 只暴露给宿主机 Nginx，不对外直接开放
+      - "127.0.0.1:8080:8080"      # HTTP：只暴露给宿主机 Nginx，不对外直接开放
+      - "0.0.0.0:2200-2299:2200-2299"  # TCP 隧道端口段：SSH 等直连，对外开放
     env_file:
       - .env
     volumes:
-      - easy_vpn_data:/app/data      # 持久化隧道规则（rules.json）
-      - ./server/static:/app/static:ro  # Vue 构建产物（只读）
+      - easy_vpn_data:/app/data        # 持久化隧道规则（rules.json）
+      - ./server/static:/app/static:ro # Vue 构建产物（只读）
 
 networks:
   default:
-    name: easy_vpn_net             # 独立网络，与 Gitea 等其他容器完全隔离
+    name: easy_vpn_net               # 独立网络，与 Gitea 等其他容器完全隔离
 
 volumes:
   easy_vpn_data:
