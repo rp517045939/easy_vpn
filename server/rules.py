@@ -1,11 +1,14 @@
 import json
+import os
 import uuid
 import logging
 from pathlib import Path
 from config import settings
 
 logger = logging.getLogger(__name__)
-RULES_FILE = Path("/app/data/rules.json")
+# Docker 内用 /app/data，本地开发用 server/data
+_default_data_dir = Path(__file__).parent / "data"
+RULES_FILE = Path(os.environ.get("DATA_DIR", str(_default_data_dir))) / "rules.json"
 
 
 class RulesManager:
