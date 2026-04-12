@@ -2,7 +2,9 @@
 # =============================================================================
 # easy_vpn 一键部署脚本
 #
-# 用法：bash install.sh
+# 用法：
+#   bash install.sh                  # 正式部署（含 SSL 证书申请）
+#   bash install.sh --test-skip-ssl  # 测试环境部署（跳过 SSL 证书步骤）
 #
 # 安全说明：
 #   - 只新增 Nginx 配置文件，绝不修改服务器上已有的任何 Nginx 配置
@@ -11,6 +13,21 @@
 # =============================================================================
 
 set -e  # 任何命令失败立即退出
+
+# ---------- 参数解析 ----------
+SKIP_SSL=false
+for arg in "$@"; do
+    case $arg in
+        --test-skip-ssl)
+            SKIP_SSL=true
+            ;;
+        *)
+            echo "未知参数：$arg"
+            echo "用法：bash install.sh [--test-skip-ssl]"
+            exit 1
+            ;;
+    esac
+done
 
 # ---------- 颜色输出 ----------
 RED='\033[0;31m'
@@ -26,6 +43,10 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 NGINX_CONF_FILE="/etc/nginx/sites-enabled/easy_vpn.conf"
+
+if [ "$SKIP_SSL" = true ]; then
+    warning "已启用 --test-skip-ssl，第五步 SSL 证书将跳过（仅限测试环境）"
+fi
 
 # =============================================================================
 # 第一步：环境检查
@@ -169,6 +190,12 @@ info "===== 第五步：SSL 证书 ====="
 # 从 Nginx 配置里提取域名
 DOMAIN=$(grep 'server_name' "$NGINX_CONF_FILE" | head -1 | awk '{print $2}' | tr -d ';')
 
+if [ "$SKIP_SSL" = true ]; then
+    warning "【--test-skip-ssl】跳过 SSL 证书步骤，测试环境通过 HTTP 访问即可"
+    warning "生产环境部署时去掉此参数以启用 SSL"
+    # 跳过整个第五步，直接进入第六步
+else
+
 # --- 5.1 设置 renewal deploy hook（所有证书续期成功后执行，graceful reload）---
 # 说明：certbot renew 每天自动跑两次，续期成功后需要 reload nginx 让新证书生效。
 # deploy hook 对服务器上所有证书生效，是统一入口，避免每个证书单独配置。
@@ -214,6 +241,8 @@ if [ "$HAS_CERTBOT" = true ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.
     fi
 fi
 
+fi  # end of SKIP_SSL check
+
 # =============================================================================
 # 第六步：验证现有服务未受影响
 # =============================================================================
@@ -240,7 +269,11 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  easy_vpn 部署完成！${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "  管理面板：https://${DOMAIN}"
+if [ "$SKIP_SSL" = true ]; then
+    echo "  管理面板：http://${DOMAIN}（测试环境，无 SSL）"
+else
+    echo "  管理面板：https://${DOMAIN}"
+fi
 echo "  查看日志：docker logs -f easy_vpn"
 echo "  停止服务：docker compose -f $PROJECT_DIR/docker-compose.yml down"
 echo "  更新服务：git pull && bash $0"
