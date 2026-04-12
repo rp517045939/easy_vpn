@@ -165,15 +165,39 @@ info "===== 第四步：配置 Nginx ====="
 if [ -f "$NGINX_CONF_FILE" ]; then
     warning "Nginx 配置文件已存在：$NGINX_CONF_FILE，跳过写入"
 else
-    # 从 deploy/nginx/easy_vpn.conf 复制（不修改其他任何文件）
-    sudo cp "$SCRIPT_DIR/nginx/easy_vpn.conf" "$NGINX_CONF_FILE"
-    info "已写入 Nginx 配置：$NGINX_CONF_FILE"
+    if [ "$SKIP_SSL" = true ]; then
+        # 测试环境：写入 HTTP-only 配置（无需 SSL 证书）
+        PANEL_HOST_VAL=$(grep '^PANEL_HOST=' "$PROJECT_DIR/.env" | cut -d'=' -f2-)
+        sudo bash -c "cat > $NGINX_CONF_FILE" << EOF
+# easy_vpn 测试环境 Nginx 配置（HTTP only，--test-skip-ssl）
+server {
+    listen 80;
+    server_name ${PANEL_HOST_VAL:-_};
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+    }
+}
+EOF
+        info "已写入测试 Nginx 配置（HTTP only）：$NGINX_CONF_FILE"
+    else
+        # 正式环境：使用 SSL 配置模板
+        sudo cp "$SCRIPT_DIR/nginx/easy_vpn.conf" "$NGINX_CONF_FILE"
+        info "已写入 Nginx 配置：$NGINX_CONF_FILE"
+    fi
 
     # 测试 Nginx 配置语法
     if ! sudo nginx -t &>/dev/null 2>&1; then
         # 回滚：删除刚写入的文件，确保现有服务不受影响
         sudo rm -f "$NGINX_CONF_FILE"
-        error "Nginx 配置语法错误，已自动回滚（现有服务未受影响）。\n请检查 $SCRIPT_DIR/nginx/easy_vpn.conf 后重新运行"
+        error "Nginx 配置语法错误，已自动回滚（现有服务未受影响）。\n请检查配置后重新运行"
     fi
     info "Nginx 配置语法检查通过"
 
