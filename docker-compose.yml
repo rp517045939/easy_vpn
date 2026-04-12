@@ -1,0 +1,15 @@
+services:
+  easy_vpn:
+    build: ./server
+    container_name: easy_vpn
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"   # 只暴露给本机 Nginx，不对外直接开放
+    env_file:
+      - .env
+    volumes:
+      - ./server/static:/app/static:ro   # Vue 构建产物
+
+networks:
+  default:
+    name: easy_vpn_net

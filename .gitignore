@@ -1,0 +1,57 @@
+# 环境变量与敏感配置 - 永远不推送
+.env
+.env.*
+!.env.example
+
+# 真实配置文件（只推 *.example.yml）
+config.yml
+config.yaml
+server/config.yml
+server/config.yaml
+client/config.yml
+client/config.yaml
+
+# 私钥 & 证书
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.pub
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# Node / Vue
+node_modules/
+dashboard/dist/
+dashboard/.env
+dashboard/.env.*
+!dashboard/.env.example
+*.local
+
+# 日志 & 数据库
+*.log
+*.sqlite
+*.db
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

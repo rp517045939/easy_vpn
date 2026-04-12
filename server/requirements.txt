@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+websockets
+python-jose[cryptography]
+passlib[bcrypt]
+pydantic-settings
+pyyaml
