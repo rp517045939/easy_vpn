@@ -66,17 +66,22 @@ async def update_rule(rule_id: str, updates: dict, user=Depends(get_current_user
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # TCP 规则端口变更：重启监听器
+    # TCP 规则：只要有任意字段变更，一律先 stop 再 start（避免目标不更新）
     if updated["type"] == "tcp" and old_rule:
         from tcp_listener import tcp_listener
-        if old_rule["server_port"] != updated["server_port"]:
-            await tcp_listener.stop(old_rule["server_port"])
+        await tcp_listener.stop(old_rule["server_port"])
         await tcp_listener.start(
             updated["server_port"], updated["client_id"],
             updated["local_host"], updated["local_port"]
         )
 
-    await tunnel_manager.push_rules(updated["client_id"], rules_manager.get_by_client(updated["client_id"]))
+    # 推送规则：如果 client_id 发生变更，旧 client 也要收到通知（规则已从它那边移走）
+    old_client_id = old_rule["client_id"] if old_rule else None
+    new_client_id = updated["client_id"]
+    await tunnel_manager.push_rules(new_client_id, rules_manager.get_by_client(new_client_id))
+    if old_client_id and old_client_id != new_client_id:
+        await tunnel_manager.push_rules(old_client_id, rules_manager.get_by_client(old_client_id))
+
     return updated
 
 

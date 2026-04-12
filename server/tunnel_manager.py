@@ -20,6 +20,14 @@ class TunnelManager:
 
     async def connect(self, client_id: str, websocket) -> None:
         async with self._lock:
+            # 如果已有同 client_id 的旧连接，主动关闭它（避免旧 handler 的 finally 误清理新连接）
+            existing = self._clients.get(client_id)
+            if existing and existing["ws"] is not websocket:
+                logger.warning(f"Client {client_id} reconnected, closing old connection")
+                try:
+                    await existing["ws"].close()
+                except Exception:
+                    pass
             self._clients[client_id] = {
                 "ws": websocket,
                 "connected_at": time.time(),
@@ -31,8 +39,15 @@ class TunnelManager:
         rules = rules_manager.get_by_client(client_id)
         await websocket.send_text(encode(MsgType.RULES_PUSH, payload={"rules": rules}))
 
-    async def disconnect(self, client_id: str) -> None:
+    async def disconnect(self, client_id: str, websocket=None) -> None:
         async with self._lock:
+            existing = self._clients.get(client_id)
+            if existing is None:
+                return
+            # 只清理调用方自己的连接：如果已被新连接替换，则跳过
+            if websocket is not None and existing["ws"] is not websocket:
+                logger.info(f"Skipping disconnect for {client_id}: already replaced by new connection")
+                return
             self._clients.pop(client_id, None)
 
         # 取消该 client 所有待处理的 HTTP channel

@@ -87,7 +87,7 @@ async def tunnel_ws(websocket: WebSocket):
         logger.error(f"WebSocket error: {e}")
     finally:
         if client_id:
-            await tunnel_manager.disconnect(client_id)
+            await tunnel_manager.disconnect(client_id, websocket=websocket)
 
 
 # 静态文件（Vue build 产物）
