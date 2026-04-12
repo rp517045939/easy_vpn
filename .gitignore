@@ -57,3 +57,5 @@ Thumbs.db
 *.swp
 server/data/
 .venv/
+.dev_server.log
+.dev_frontend.log
