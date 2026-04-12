@@ -1,6 +1,8 @@
 services:
   easy_vpn:
-    build: ./server
+    build:
+      context: .                   # 项目根目录为构建上下文（多阶段构建需要同时访问 dashboard/ 和 server/）
+      dockerfile: server/Dockerfile
     image: easy_vpn:latest
     container_name: easy_vpn
     restart: unless-stopped
@@ -11,7 +13,6 @@ services:
       - .env
     volumes:
       - easy_vpn_data:/app/data        # 持久化隧道规则（rules.json）
-      - ./server/static:/app/static:ro # Vue 构建产物（只读）
 
 networks:
   default:

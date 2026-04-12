@@ -42,6 +42,9 @@ dashboard/.env.*
 !dashboard/.env.example
 *.local
 
+# Vue 构建产物（由 Docker 多阶段构建生成，不提交）
+server/static/
+
 # 日志 & 数据库
 *.log
 *.sqlite
