@@ -4,21 +4,15 @@ import Dashboard from '../views/Dashboard.vue'
 
 const routes = [
   { path: '/login', component: Login },
-  {
-    path: '/',
-    component: Dashboard,
-    meta: { requiresAuth: true },
-  },
+  { path: '/', component: Dashboard, meta: { requiresAuth: true } },
 ]
 
-const router = createRouter({
-  history: createWebHistory(),
-  routes,
-})
+const router = createRouter({ history: createWebHistory(), routes })
 
-// 路由守卫：未登录跳转到 /login
 router.beforeEach((to, from, next) => {
-  // TODO: 检查 token
+  const token = localStorage.getItem('token')
+  if (to.meta.requiresAuth && !token) return next('/login')
+  if (to.path === '/login' && token) return next('/')
   next()
 })
 

@@ -1,53 +1,92 @@
-"""
-TCP 隧道监听器。
-
-职责：
-- 在配置的端口上监听原始 TCP 连接（如 :2222 用于 SSH）
-- 每个新 TCP 连接分配一个 channel_id
-- 通过 TunnelManager 向对应 Client 发送 tcp_open 消息
-- 将 TCP 数据双向转发：
-    外部 TCP → channel → Client → 本地服务（如 Mac:22）
-    本地服务  → Client → channel → 外部 TCP
-- 连接断开时发送 tcp_close 消息
-
-端口范围：2200-2299（在 docker-compose 中统一开放）
-每条 TCP 规则占用一个端口，由管理面板分配。
-
-示例规则：
-  server_port: 2222
-  client_id:   mac
-  local_host:  127.0.0.1
-  local_port:  22
-  label:       Mac SSH
-"""
 import asyncio
+import logging
+from protocol import new_channel_id
+
+logger = logging.getLogger(__name__)
 
 
 class TcpListener:
 
-    def __init__(self, tunnel_manager):
-        self.tunnel_manager = tunnel_manager
-        self._servers: dict[int, asyncio.Server] = {}  # port → asyncio.Server
+    def __init__(self):
+        self._tunnel_manager = None
+        self._servers: dict[int, asyncio.Server] = {}
+
+    def set_tunnel_manager(self, tm) -> None:
+        self._tunnel_manager = tm
 
     async def start(self, server_port: int, client_id: str,
                     local_host: str, local_port: int) -> None:
-        """在 server_port 上启动 TCP 监听，关联到指定 Client 的本地端口"""
-        pass
+        if server_port in self._servers:
+            logger.warning(f"Port {server_port} already listening, skipping")
+            return
+
+        async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+            await self._handle_connection(reader, writer, client_id, local_host, local_port)
+
+        server = await asyncio.start_server(handle, "0.0.0.0", server_port)
+        self._servers[server_port] = server
+        asyncio.create_task(server.serve_forever())
+        logger.info(f"TCP listener :{server_port} -> {client_id} -> {local_host}:{local_port}")
 
     async def stop(self, server_port: int) -> None:
-        """停止指定端口的监听（规则删除时调用）"""
-        pass
+        server = self._servers.pop(server_port, None)
+        if server:
+            server.close()
+            await server.wait_closed()
+            logger.info(f"TCP listener stopped: :{server_port}")
 
     async def stop_all(self) -> None:
-        """停止所有 TCP 监听"""
-        pass
+        for port in list(self._servers.keys()):
+            await self.stop(port)
 
     async def _handle_connection(self, reader: asyncio.StreamReader,
                                   writer: asyncio.StreamWriter,
                                   client_id: str,
                                   local_host: str, local_port: int) -> None:
-        """处理一个新 TCP 连接：分配 channel_id，通知 Client，双向转发数据"""
-        pass
+        channel_id = new_channel_id()
+        peer = writer.get_extra_info("peername")
+        logger.info(f"TCP connection {peer} -> channel {channel_id[:8]} -> {client_id}:{local_port}")
+        tm = self._tunnel_manager
+
+        try:
+            queue = await tm.open_tcp_channel(client_id, channel_id, local_host, local_port)
+        except ConnectionError as e:
+            logger.warning(f"Cannot open TCP channel: {e}")
+            writer.close()
+            return
+
+        async def pipe_in():
+            """外部 TCP → WebSocket → Client"""
+            try:
+                while True:
+                    data = await reader.read(65536)
+                    if not data:
+                        break
+                    await tm.send_tcp_data(client_id, channel_id, data)
+            except Exception as e:
+                logger.debug(f"pipe_in error {channel_id[:8]}: {e}")
+            finally:
+                await tm.close_tcp_channel(client_id, channel_id)
+
+        async def pipe_out():
+            """Client → WebSocket → 外部 TCP"""
+            try:
+                while True:
+                    data = await queue.get()
+                    if data is None:
+                        break
+                    writer.write(data)
+                    await writer.drain()
+            except Exception as e:
+                logger.debug(f"pipe_out error {channel_id[:8]}: {e}")
+            finally:
+                try:
+                    writer.close()
+                except Exception:
+                    pass
+
+        await asyncio.gather(pipe_in(), pipe_out())
+        logger.info(f"TCP channel {channel_id[:8]} closed")
 
 
-tcp_listener = TcpListener(None)  # tunnel_manager 在 main.py 中注入
+tcp_listener = TcpListener()

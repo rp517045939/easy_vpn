@@ -1,22 +1,27 @@
-"""
-从环境变量读取配置，所有敏感值通过 .env 注入，不硬编码。
-"""
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # 服务监听
     host: str = "0.0.0.0"
     port: int = 8080
 
-    # 认证
-    secret_key: str          # JWT 签名密钥，必填
-    admin_username: str      # 管理面板用户名，必填
-    admin_password: str      # 管理面板密码，必填
+    secret_key: str
+    admin_username: str
+    admin_password: str
     token_expire_minutes: int = 60 * 24
 
-    # 隧道
-    client_token: str        # Client 注册时使用的共享 token，必填
+    client_token: str
+
+    # 管理面板的域名，用于区分面板请求和隧道请求
+    panel_host: str = "vpn.ruanpengpeng.cn"
+
+    # TCP 隧道端口范围
+    tcp_port_min: int = 2200
+    tcp_port_max: int = 2299
+
+    # 心跳间隔（秒）
+    heartbeat_interval: int = 30
+    heartbeat_timeout: int = 90
 
     class Config:
         env_file = ".env"

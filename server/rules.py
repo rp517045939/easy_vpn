@@ -1,84 +1,116 @@
-"""
-隧道规则管理。
-
-规则分两类：
-
-  HTTP 规则：
-    type:       "http"
-    client_id:  "nas"
-    subdomain:  "nas.ruanpengpeng.cn"
-    local_host: "127.0.0.1"
-    local_port: 5000
-    label:      "NAS 管理页面"
-
-  TCP 规则：
-    type:        "tcp"
-    client_id:   "mac"
-    server_port: 2222            # 云服务器上监听的端口（2200-2299 范围内）
-    local_host:  "127.0.0.1"
-    local_port:  22              # Client 本地端口（SSH 默认 22）
-    label:       "Mac SSH"
-
-存储：JSON 文件持久化（/app/data/rules.json，Docker volume 挂载）
-
-规则变更时：
-  - 持久化到 rules.json
-  - 若 Client 在线，通过 WebSocket 实时推送更新
-  - TCP 规则新增时，启动对应端口的 TcpListener
-  - TCP 规则删除时，停止对应端口的 TcpListener
-"""
 import json
+import uuid
+import logging
 from pathlib import Path
+from config import settings
 
+logger = logging.getLogger(__name__)
 RULES_FILE = Path("/app/data/rules.json")
 
 
 class RulesManager:
 
+    def __init__(self):
+        self._data: dict = self._load()
+
+    # ------------------------------------------------------------------ 读
+
+    def get_all(self) -> list:
+        return self._data["rules"]
+
     def get_by_client(self, client_id: str) -> list:
-        """获取指定 Client 的所有规则（HTTP + TCP）"""
-        pass
-
-    def get_all(self) -> dict:
-        """获取所有 Client 的规则，供面板展示"""
-        pass
-
-    def add_rule(self, rule: dict) -> dict:
-        """
-        新增规则。
-        HTTP 规则：校验 subdomain 唯一性。
-        TCP 规则：校验 server_port 在 2200-2299 范围内且未被占用，
-                  启动 TcpListener。
-        返回带 id 的完整规则。
-        """
-        pass
-
-    def update_rule(self, rule_id: str, rule: dict) -> dict:
-        """修改规则，若为 TCP 规则且端口变更，重启对应 TcpListener"""
-        pass
-
-    def delete_rule(self, rule_id: str) -> None:
-        """
-        删除规则。
-        TCP 规则：停止对应 TcpListener。
-        """
-        pass
+        return [r for r in self._data["rules"] if r["client_id"] == client_id]
 
     def resolve_http(self, subdomain: str) -> dict | None:
-        """根据 subdomain 查找 HTTP 规则，供 proxy.py 使用"""
-        pass
+        for r in self._data["rules"]:
+            if r["type"] == "http" and r["subdomain"] == subdomain:
+                return r
+        return None
 
     def resolve_tcp(self, server_port: int) -> dict | None:
-        """根据 server_port 查找 TCP 规则，供 tcp_listener.py 使用"""
-        pass
+        for r in self._data["rules"]:
+            if r["type"] == "tcp" and r["server_port"] == server_port:
+                return r
+        return None
+
+    def get_used_tcp_ports(self) -> set:
+        return {r["server_port"] for r in self._data["rules"] if r["type"] == "tcp"}
+
+    def get_available_ports(self) -> list:
+        used = self.get_used_tcp_ports()
+        return [p for p in range(settings.tcp_port_min, settings.tcp_port_max + 1)
+                if p not in used]
+
+    # ------------------------------------------------------------------ 写
+
+    def add_rule(self, rule: dict) -> dict:
+        self._validate(rule)
+        new_rule = {**rule, "id": str(uuid.uuid4())}
+        self._data["rules"].append(new_rule)
+        self._save()
+        logger.info(f"Rule added: {new_rule}")
+        return new_rule
+
+    def update_rule(self, rule_id: str, updates: dict) -> dict:
+        for i, r in enumerate(self._data["rules"]):
+            if r["id"] == rule_id:
+                updated = {**r, **updates, "id": rule_id}
+                self._validate(updated, exclude_id=rule_id)
+                self._data["rules"][i] = updated
+                self._save()
+                logger.info(f"Rule updated: {updated}")
+                return updated
+        raise ValueError(f"Rule not found: {rule_id}")
+
+    def delete_rule(self, rule_id: str) -> dict:
+        for i, r in enumerate(self._data["rules"]):
+            if r["id"] == rule_id:
+                self._data["rules"].pop(i)
+                self._save()
+                logger.info(f"Rule deleted: {rule_id}")
+                return r
+        raise ValueError(f"Rule not found: {rule_id}")
+
+    # ------------------------------------------------------------------ 内部
+
+    def _validate(self, rule: dict, exclude_id: str = None):
+        rule_type = rule.get("type")
+        if rule_type == "http":
+            for f in ("client_id", "subdomain", "local_host", "local_port"):
+                if not rule.get(f):
+                    raise ValueError(f"HTTP rule missing field: {f}")
+            # subdomain 唯一性检查
+            for r in self._data["rules"]:
+                if r["type"] == "http" and r["subdomain"] == rule["subdomain"] and r.get("id") != exclude_id:
+                    raise ValueError(f"Subdomain already in use: {rule['subdomain']}")
+
+        elif rule_type == "tcp":
+            for f in ("client_id", "server_port", "local_host", "local_port"):
+                if not rule.get(f):
+                    raise ValueError(f"TCP rule missing field: {f}")
+            port = rule["server_port"]
+            if not (settings.tcp_port_min <= port <= settings.tcp_port_max):
+                raise ValueError(f"server_port must be in {settings.tcp_port_min}-{settings.tcp_port_max}")
+            # 端口唯一性检查
+            for r in self._data["rules"]:
+                if r["type"] == "tcp" and r["server_port"] == port and r.get("id") != exclude_id:
+                    raise ValueError(f"TCP port already in use: {port}")
+        else:
+            raise ValueError(f"Invalid rule type: {rule_type}")
 
     def _load(self) -> dict:
-        """从 JSON 文件加载规则"""
-        pass
+        if RULES_FILE.exists():
+            try:
+                with open(RULES_FILE, encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Failed to load rules: {e}")
+        return {"rules": []}
 
-    def _save(self, data: dict) -> None:
-        """持久化规则到 JSON 文件"""
-        pass
+    def _save(self):
+        RULES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(RULES_FILE, "w", encoding="utf-8") as f:
+            json.dump(self._data, f, indent=2, ensure_ascii=False)
 
 
 rules_manager = RulesManager()

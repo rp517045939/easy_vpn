@@ -1,47 +1,112 @@
-"""
-easy_vpn Server 入口。
-
-启动时：
-  1. 加载规则（rules.json）
-  2. 为所有 TCP 规则启动对应的 TcpListener
-  3. 启动 FastAPI（HTTP 管理 API + WebSocket 隧道端点）
-
-端口说明：
-  :8080  HTTP，经 Nginx 代理（管理面板 + HTTP 隧道 + WebSocket 控制通道）
-  :2200-2299  TCP，docker-compose 直接暴露（SSH 等 TCP 隧道）
-"""
+import asyncio
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+
 from api import router as api_router
+from auth import verify_client_token
+from config import settings
+from protocol import MsgType, decode, encode
+from rules import rules_manager
+from tcp_listener import tcp_listener
+from tunnel_manager import tunnel_manager
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动：加载规则，启动所有 TCP 监听器
-    # await startup()
+    # 启动：初始化 TCP 监听器 + 心跳任务
+    tcp_listener.set_tunnel_manager(tunnel_manager)
+    for rule in rules_manager.get_all():
+        if rule["type"] == "tcp":
+            await tcp_listener.start(
+                rule["server_port"], rule["client_id"],
+                rule["local_host"], rule["local_port"],
+            )
+    heartbeat_task = asyncio.create_task(tunnel_manager.heartbeat_loop())
+    logger.info("easy_vpn server started")
     yield
-    # 关闭：停止所有 TCP 监听器
-    # await shutdown()
+    # 关闭
+    heartbeat_task.cancel()
+    await tcp_listener.stop_all()
+    logger.info("easy_vpn server stopped")
 
 
 app = FastAPI(title="easy_vpn", lifespan=lifespan)
-
-# 管理面板 REST API
 app.include_router(api_router)
 
-# WebSocket 端点：Client 注册隧道、接收规则、收发隧道数据
-# @app.websocket("/tunnel/ws")
-# async def tunnel_ws(websocket: WebSocket): ...
 
-# HTTP 穿透流量入口（根据 Host 头路由到对应 Client 的隧道）
-# @app.api_route("/{path:path}", methods=[...])
-# async def proxy_handler(request: Request): ...
-
-# 健康检查（deploy/install.sh 用于验证容器启动状态）
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
 
-# Vue 面板静态文件（生产环境，build 产物）
-# app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+@app.websocket("/tunnel/ws")
+async def tunnel_ws(websocket: WebSocket):
+    await websocket.accept()
+    client_id = None
+    try:
+        # 第一条消息必须是 register
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=15.0)
+        msg = decode(raw)
+
+        if msg.get("type") != MsgType.REGISTER:
+            await websocket.close(code=4001, reason="First message must be register")
+            return
+
+        payload = msg.get("payload", {})
+        if not verify_client_token(payload.get("token", "")):
+            await websocket.close(code=4003, reason="Invalid token")
+            return
+
+        client_id = payload.get("client_id", "").strip()
+        if not client_id:
+            await websocket.close(code=4002, reason="client_id is required")
+            return
+
+        await tunnel_manager.connect(client_id, websocket)
+
+        while True:
+            raw = await websocket.receive_text()
+            await tunnel_manager.dispatch(client_id, raw)
+
+    except WebSocketDisconnect:
+        pass
+    except asyncio.TimeoutError:
+        logger.warning("Client did not register in time")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+    finally:
+        if client_id:
+            await tunnel_manager.disconnect(client_id)
+
+
+# 静态文件（Vue build 产物）
+_static_dir = Path("static")
+
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+async def catch_all(request: Request, path: str):
+    host = request.headers.get("host", "").split(":")[0]
+
+    # 管理面板域名 → 服务 Vue SPA
+    if host == settings.panel_host or host in ("localhost", "127.0.0.1"):
+        if _static_dir.exists():
+            target = _static_dir / path
+            if target.exists() and target.is_file():
+                return FileResponse(str(target))
+            return FileResponse(str(_static_dir / "index.html"))
+        return JSONResponse({"message": "Dashboard not built yet. Run: cd dashboard && npm run build"}, status_code=503)
+
+    # 其他域名 → HTTP 隧道代理
+    from proxy import proxy_handler
+    return await proxy_handler(request)
