@@ -51,6 +51,9 @@ dashboard/.env.*
 .DS_Store
 Thumbs.db
 
+# Claude Code 本地 worktree（嵌套 git 仓库，勿提交）
+.claude/worktrees/
+
 # IDE
 .vscode/
 .idea/
