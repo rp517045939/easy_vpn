@@ -86,7 +86,14 @@ class TunnelManager:
         msg_type = msg.get("type")
         channel_id = msg.get("channel_id")
 
-        if msg_type == MsgType.HEARTBEAT:
+        if msg_type == MsgType.HEARTBEAT_ACK:
+            # 服务端发 HEARTBEAT，客户端回 HEARTBEAT_ACK → 更新心跳时间
+            async with self._lock:
+                if client_id in self._clients:
+                    self._clients[client_id]["last_heartbeat"] = time.time()
+
+        elif msg_type == MsgType.HEARTBEAT:
+            # 兼容客户端主动发心跳的场景
             async with self._lock:
                 if client_id in self._clients:
                     self._clients[client_id]["last_heartbeat"] = time.time()
