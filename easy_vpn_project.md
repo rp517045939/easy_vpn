@@ -253,6 +253,7 @@ easy_vpn/
 - [ ] Windows 客户端开机自启
 - [ ] Cloudflare Tunnel 集成选项
 - [ ] 访问日志、告警通知
+- [ ] UDP 隧道支持（游戏服务器等场景，暂缓）
 
 ---
 
