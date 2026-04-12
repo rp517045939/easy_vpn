@@ -29,8 +29,11 @@ export const authApi = {
 }
 
 export const clientApi = {
-  list: () => http.get('/clients'),
-  get: (id) => http.get(`/clients/${id}`),
+  list: ()                          => http.get('/clients'),
+  getRules: (clientId)              => http.get(`/clients/${clientId}/rules`),
+  addRule: (clientId, rule)         => http.post(`/clients/${clientId}/rules`, rule),
+  updateRule: (clientId, subdomain, rule) => http.put(`/clients/${clientId}/rules/${subdomain}`, rule),
+  deleteRule: (clientId, subdomain) => http.delete(`/clients/${clientId}/rules/${subdomain}`),
 }
 
 export const statsApi = {

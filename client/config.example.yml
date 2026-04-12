@@ -1,19 +1,10 @@
-# easy_vpn Client 配置示例
+# easy_vpn Client 配置
 # 复制为 config.yml 并填入真实值（config.yml 不会被提交到 git）
+# 隧道规则无需在此配置，连接 Server 后自动从管理面板下发
 
 server:
-  url: wss://vpn.yourdomain.com/tunnel/ws   # Server 的 WebSocket 地址
+  url: wss://vpn.yourdomain.com/tunnel/ws   # Server WebSocket 地址
   token: YOUR_CLIENT_TOKEN                   # 与 Server 端 CLIENT_TOKEN 一致
 
 client:
   id: nas                                    # 唯一标识，建议用设备名（nas / mac / win）
-
-tunnels:
-  - subdomain: nas.yourdomain.com            # 外部访问的域名
-    local_host: 127.0.0.1                    # 本地服务地址
-    local_port: 5000                         # 本地服务端口
-
-  # 可以配置多个隧道
-  # - subdomain: dev.yourdomain.com
-  #   local_host: 127.0.0.1
-  #   local_port: 3000
