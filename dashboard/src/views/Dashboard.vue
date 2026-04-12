@@ -145,12 +145,12 @@
     <!-- 新增/编辑弹窗 -->
     <Transition name="modal">
       <div v-if="modal.visible" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
-        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" @click="modal.visible = false"></div>
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" @click="modal.visible = false; clientDropdownOpen = false"></div>
         
         <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
           <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <h4 class="text-lg font-bold text-slate-900">{{ modal.rule.id ? '编辑规则' : '新增规则' }}</h4>
-            <button class="text-slate-400 hover:text-slate-600 transition-colors" @click="modal.visible = false">
+            <button class="text-slate-400 hover:text-slate-600 transition-colors" @click="modal.visible = false; clientDropdownOpen = false">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
           </div>
@@ -166,7 +166,44 @@
             
             <div>
               <label class="label">设备 ID (Client ID)</label>
-              <input v-model="modal.rule.client_id" placeholder="如 nas / mac" class="input-field font-mono text-sm" />
+              <div class="relative" v-click-outside="() => clientDropdownOpen = false">
+                <div class="flex">
+                  <input
+                    v-model="modal.rule.client_id"
+                    placeholder="如 nas / mac"
+                    class="input-field font-mono text-sm rounded-r-none flex-1"
+                    @focus="clientDropdownOpen = clients.length > 0"
+                  />
+                  <button
+                    v-if="clients.length > 0"
+                    type="button"
+                    @click="clientDropdownOpen = !clientDropdownOpen"
+                    class="px-3 bg-white border border-l-0 border-slate-200 rounded-r-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <svg class="w-4 h-4 transition-transform" :class="clientDropdownOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
+                </div>
+                <div
+                  v-if="clientDropdownOpen && clients.length > 0"
+                  class="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
+                >
+                  <div
+                    v-for="c in clients"
+                    :key="c.client_id"
+                    @mousedown.prevent="modal.rule.client_id = c.client_id; clientDropdownOpen = false"
+                    class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
+                    :class="modal.rule.client_id === c.client_id ? 'bg-indigo-50' : ''"
+                  >
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] flex-shrink-0"></span>
+                    <span class="font-mono text-sm text-slate-800 flex-1">{{ c.client_id }}</span>
+                    <span v-if="modal.rule.client_id === c.client_id" class="text-indigo-500">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <template v-if="modal.rule.type === 'http'">
@@ -214,7 +251,7 @@
           </div>
 
           <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-            <button class="btn-secondary" @click="modal.visible = false">取消</button>
+            <button class="btn-secondary" @click="modal.visible = false; clientDropdownOpen = false">取消</button>
             <button class="btn-primary" :disabled="modal.saving" @click="saveRule">
               {{ modal.saving ? '保存中...' : '确认保存' }}
             </button>
@@ -234,10 +271,22 @@ import { clientApi, rulesApi, statsApi, portsApi } from '../api/index'
 const router = useRouter()
 const auth   = useAuthStore()
 
-const clients        = ref([])
-const rules          = ref([])
-const stats          = ref({})
-const availablePorts = ref([])
+const clients           = ref([])
+const rules             = ref([])
+const stats             = ref({})
+const availablePorts    = ref([])
+const clientDropdownOpen = ref(false)
+
+// v-click-outside 指令
+const vClickOutside = {
+  mounted(el, binding) {
+    el._clickOutside = (e) => { if (!el.contains(e.target)) binding.value(e) }
+    document.addEventListener('mousedown', el._clickOutside)
+  },
+  unmounted(el) {
+    document.removeEventListener('mousedown', el._clickOutside)
+  },
+}
 
 const onlineCount = computed(() => clients.value.length)
 const isOnline    = (clientId) => clients.value.some(c => c.client_id === clientId)
@@ -277,7 +326,8 @@ async function saveRule() {
     } else {
       await rulesApi.add(modal.value.rule)
     }
-    modal.value.visible = false
+    modal.value.visible  = false
+    clientDropdownOpen.value = false
     await refresh()
   } catch (e) {
     modal.value.error = e.response?.data?.detail || '保存失败'
