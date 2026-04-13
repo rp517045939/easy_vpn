@@ -157,9 +157,10 @@ async def _handle_http(ws, channel_id: str, request_data: dict, rules: list):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="easy_vpn client")
-    parser.add_argument("--config",  default="config.yml", help="config file path")
-    parser.add_argument("--ui-port", type=int, default=7070,  help="Web UI port (default: 7070)")
-    parser.add_argument("--no-ui",   action="store_true",     help="disable Web UI")
+    parser.add_argument("--config",   default="config.yml",  help="config file path")
+    parser.add_argument("--ui-host",  default="127.0.0.1",   help="Web UI listen host (default: 127.0.0.1)")
+    parser.add_argument("--ui-port",  type=int, default=7070, help="Web UI port (default: 7070)")
+    parser.add_argument("--no-ui",    action="store_true",    help="disable Web UI")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -171,7 +172,7 @@ if __name__ == "__main__":
         tasks = [asyncio.create_task(run(str(config_path)))]
         if not args.no_ui:
             from web_ui import start_web_ui
-            tasks.append(asyncio.create_task(start_web_ui(port=args.ui_port)))
+            tasks.append(asyncio.create_task(start_web_ui(host=args.ui_host, port=args.ui_port)))
         await asyncio.gather(*tasks)
 
     asyncio.run(main())

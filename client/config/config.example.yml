@@ -1,0 +1,10 @@
+# easy_vpn Client 配置
+# 复制为 config.yml 并填入真实值（config.yml 不会被提交到 git）
+# 隧道规则无需在此配置，连接 Server 后自动从管理面板下发
+
+server:
+  url: wss://vpn.yourdomain.com/tunnel/ws   # Server WebSocket 地址
+  token: YOUR_CLIENT_TOKEN                   # 与 Server 端 CLIENT_TOKEN 一致
+
+client:
+  id: nas                                    # 唯一标识，建议用设备名（nas / mac / win）

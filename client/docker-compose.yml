@@ -1,0 +1,11 @@
+services:
+  easy_vpn_client:
+    image: easy_vpn_client:latest
+    build: .
+    container_name: easy_vpn_client
+    restart: unless-stopped
+    network_mode: host          # 使用宿主机网络，方便访问 NAS 本地服务
+    volumes:
+      - ./config:/config        # 配置目录挂载，config.yml 放在这里
+    command: ["--config", "/config/config.yml", "--ui-host", "0.0.0.0"]
+    # Web UI 在 host 模式下直接通过宿主机 IP:7070 访问，无需 ports 映射

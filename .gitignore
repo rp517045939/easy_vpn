@@ -10,6 +10,8 @@ server/config.yml
 server/config.yaml
 client/config.yml
 client/config.yaml
+client/config/config.yml
+client/config/config.yaml
 
 # 私钥 & 证书
 *.pem
