@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     # 启动：初始化 TCP 监听器 + 心跳任务
     tcp_listener.set_tunnel_manager(tunnel_manager)
     for rule in rules_manager.get_all():
-        if rule["type"] == "tcp":
+        if rule["type"] == "tcp" and rule.get("enabled", True):
             await tcp_listener.start(
                 rule["server_port"], rule["client_id"],
                 rule["local_host"], rule["local_port"],

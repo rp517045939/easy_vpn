@@ -22,21 +22,24 @@ class RulesManager:
         return self._data["rules"]
 
     def get_by_client(self, client_id: str) -> list:
-        return [r for r in self._data["rules"] if r["client_id"] == client_id]
+        """只返回启用的规则，用于推送给 client。"""
+        return [r for r in self._data["rules"]
+                if r["client_id"] == client_id and r.get("enabled", True)]
 
     def resolve_http(self, subdomain: str) -> dict | None:
         for r in self._data["rules"]:
-            if r["type"] == "http" and r["subdomain"] == subdomain:
+            if r["type"] == "http" and r["subdomain"] == subdomain and r.get("enabled", True):
                 return r
         return None
 
     def resolve_tcp(self, server_port: int) -> dict | None:
         for r in self._data["rules"]:
-            if r["type"] == "tcp" and r["server_port"] == server_port:
+            if r["type"] == "tcp" and r["server_port"] == server_port and r.get("enabled", True):
                 return r
         return None
 
     def get_used_tcp_ports(self) -> set:
+        # 无论启用/禁用，端口都视为占用，防止重复分配
         return {r["server_port"] for r in self._data["rules"] if r["type"] == "tcp"}
 
     def get_available_ports(self) -> list:
@@ -48,11 +51,20 @@ class RulesManager:
 
     def add_rule(self, rule: dict) -> dict:
         self._validate(rule)
-        new_rule = {**rule, "id": str(uuid.uuid4())}
+        new_rule = {**rule, "id": str(uuid.uuid4()), "enabled": True}
         self._data["rules"].append(new_rule)
         self._save()
         logger.info(f"Rule added: {new_rule}")
         return new_rule
+
+    def toggle_rule(self, rule_id: str) -> dict:
+        for i, r in enumerate(self._data["rules"]):
+            if r["id"] == rule_id:
+                self._data["rules"][i] = {**r, "enabled": not r.get("enabled", True)}
+                self._save()
+                logger.info(f"Rule toggled: {rule_id} enabled={self._data['rules'][i]['enabled']}")
+                return self._data["rules"][i]
+        raise ValueError(f"Rule not found: {rule_id}")
 
     def update_rule(self, rule_id: str, updates: dict) -> dict:
         for i, r in enumerate(self._data["rules"]):

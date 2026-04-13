@@ -101,7 +101,9 @@
                   </div>
                 </td>
               </tr>
-              <tr v-for="rule in rules" :key="rule.id" class="hover:bg-indigo-50/30 transition-colors duration-200 group">
+              <tr v-for="rule in rules" :key="rule.id"
+                  :class="['hover:bg-indigo-50/30 transition-colors duration-200 group',
+                           rule.enabled === false ? 'opacity-50' : '']">
                 <td class="py-4 px-6">
                   <span v-if="rule.type === 'http'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
                     HTTP
@@ -126,13 +128,27 @@
                   </div>
                 </td>
                 <td class="py-4 px-6 text-right">
-                  <div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button class="btn-icon" @click="openModal(rule)" title="编辑">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                  <div class="flex items-center justify-end gap-3">
+                    <!-- 启用/暂停开关（常驻显示） -->
+                    <button
+                      @click="toggleRule(rule)"
+                      :title="rule.enabled === false ? '点击启用' : '点击暂停'"
+                      :class="['relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none',
+                               rule.enabled === false ? 'bg-slate-200' : 'bg-emerald-500']"
+                    >
+                      <span :class="['pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200',
+                                     rule.enabled === false ? 'translate-x-0' : 'translate-x-4']">
+                      </span>
                     </button>
-                    <button class="btn-icon danger" @click="deleteRule(rule)" title="删除">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
+                    <!-- 编辑/删除（hover 显示） -->
+                    <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <button class="btn-icon" @click="openModal(rule)" title="编辑">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                      </button>
+                      <button class="btn-icon danger" @click="deleteRule(rule)" title="删除">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -334,6 +350,11 @@ async function saveRule() {
   } finally {
     modal.value.saving = false
   }
+}
+
+async function toggleRule(rule) {
+  await rulesApi.toggle(rule.id)
+  await refresh()
 }
 
 async function deleteRule(rule) {

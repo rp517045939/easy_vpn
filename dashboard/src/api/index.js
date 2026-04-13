@@ -41,6 +41,7 @@ export const rulesApi = {
   // TCP:  { type:'tcp',  client_id:'mac', server_port:2222,
   //         local_host:'127.0.0.1', local_port:22,   label:'Mac SSH' }
   update: (ruleId, rule)  => http.put(`/rules/${ruleId}`, rule),
+  toggle: (ruleId)        => http.patch(`/rules/${ruleId}/toggle`),
   delete: (ruleId)        => http.delete(`/rules/${ruleId}`),
 }
 

@@ -45,12 +45,12 @@ async def add_rule(rule: dict, user=Depends(get_current_user)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # TCP 规则：立即启动端口监听
+    # TCP 规则：新规则默认启用，立即启动端口监听
     if rule["type"] == "tcp":
         from tcp_listener import tcp_listener
         await tcp_listener.start(
-            rule["server_port"], rule["client_id"],
-            rule["local_host"], rule["local_port"]
+            new_rule["server_port"], new_rule["client_id"],
+            new_rule["local_host"], new_rule["local_port"]
         )
 
     # 推送最新规则给在线 Client
@@ -83,6 +83,29 @@ async def update_rule(rule_id: str, updates: dict, user=Depends(get_current_user
         await tunnel_manager.push_rules(old_client_id, rules_manager.get_by_client(old_client_id))
 
     return updated
+
+
+@router.patch("/rules/{rule_id}/toggle")
+async def toggle_rule(rule_id: str, user=Depends(get_current_user)):
+    try:
+        rule = rules_manager.toggle_rule(rule_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # TCP 规则：根据新状态启动或停止监听
+    if rule["type"] == "tcp":
+        from tcp_listener import tcp_listener
+        if rule["enabled"]:
+            await tcp_listener.start(
+                rule["server_port"], rule["client_id"],
+                rule["local_host"], rule["local_port"]
+            )
+        else:
+            await tcp_listener.stop(rule["server_port"])
+
+    # 推送给 client（get_by_client 只推 enabled 的规则）
+    await tunnel_manager.push_rules(rule["client_id"], rules_manager.get_by_client(rule["client_id"]))
+    return rule
 
 
 @router.delete("/rules/{rule_id}")
