@@ -104,6 +104,10 @@ async def catch_all(request: Request, path: str):
             target = _static_dir / path
             if target.exists() and target.is_file():
                 return FileResponse(str(target))
+            # 有文件扩展名但文件不存在 → 404（拒绝扫描路径如 /.env /.git/config）
+            if Path(path).suffix:
+                return JSONResponse({"detail": "Not Found"}, status_code=404)
+            # 无扩展名 → SPA 路由，返回 index.html
             return FileResponse(str(_static_dir / "index.html"))
         return JSONResponse({"message": "Dashboard not built yet. Run: cd dashboard && npm run build"}, status_code=503)
 
