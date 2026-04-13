@@ -66,7 +66,10 @@ class TcpListener:
             except Exception as e:
                 logger.debug(f"pipe_in error {channel_id[:8]}: {e}")
             finally:
-                await tm.close_tcp_channel(client_id, channel_id)
+                try:
+                    await tm.close_tcp_channel(client_id, channel_id)
+                except Exception as e:
+                    logger.debug(f"close_tcp_channel error {channel_id[:8]}: {e}")
 
         async def pipe_out():
             """Client → WebSocket → 外部 TCP"""

@@ -30,6 +30,7 @@ class TunnelManager:
                     pass
             self._clients[client_id] = {
                 "ws": websocket,
+                "send_lock": asyncio.Lock(),
                 "connected_at": time.time(),
                 "last_heartbeat": time.time(),
             }
@@ -37,7 +38,7 @@ class TunnelManager:
 
         from rules import rules_manager
         rules = rules_manager.get_by_client(client_id)
-        await websocket.send_text(encode(MsgType.RULES_PUSH, payload={"rules": rules}))
+        await self._send(client_id, encode(MsgType.RULES_PUSH, payload={"rules": rules}))
 
     async def disconnect(self, client_id: str, websocket=None) -> None:
         async with self._lock:
@@ -79,6 +80,16 @@ class TunnelManager:
             for cid, info in self._clients.items()
         ]
 
+    # ------------------------------------------------------------------ 发送（加锁防并发）
+
+    async def _send(self, client_id: str, text: str) -> None:
+        """所有向 client 发送的入口，保证串行，避免并发 send_text 崩溃。"""
+        client = self._clients.get(client_id)
+        if not client:
+            return
+        async with client["send_lock"]:
+            await client["ws"].send_text(text)
+
     # ------------------------------------------------------------------ 消息分发
 
     async def dispatch(self, client_id: str, raw: str) -> None:
@@ -97,9 +108,7 @@ class TunnelManager:
             async with self._lock:
                 if client_id in self._clients:
                     self._clients[client_id]["last_heartbeat"] = time.time()
-            client = self._clients.get(client_id)
-            if client:
-                await client["ws"].send_text(encode(MsgType.HEARTBEAT_ACK))
+            await self._send(client_id, encode(MsgType.HEARTBEAT_ACK))
 
         elif msg_type == MsgType.HTTP_RESPONSE:
             future = self._http_channels.pop(channel_id, None)
@@ -132,7 +141,7 @@ class TunnelManager:
         self._http_channels[channel_id] = future
         self._channel_owner[channel_id] = client_id
 
-        await client["ws"].send_text(encode(MsgType.HTTP_REQUEST, channel_id=channel_id, payload=request_data))
+        await self._send(client_id, encode(MsgType.HTTP_REQUEST, channel_id=channel_id, payload=request_data))
 
         try:
             return await asyncio.wait_for(future, timeout=30.0)
@@ -153,31 +162,25 @@ class TunnelManager:
         self._tcp_queues[channel_id] = queue
         self._channel_owner[channel_id] = client_id
 
-        await client["ws"].send_text(encode(
+        await self._send(client_id, encode(
             MsgType.TCP_OPEN, channel_id=channel_id,
             payload={"local_host": local_host, "local_port": local_port}
         ))
         return queue
 
     async def send_tcp_data(self, client_id: str, channel_id: str, data: bytes) -> None:
-        client = self._clients.get(client_id)
-        if client:
-            await client["ws"].send_text(encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
+        await self._send(client_id, encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
 
     async def close_tcp_channel(self, client_id: str, channel_id: str) -> None:
-        client = self._clients.get(client_id)
-        if client:
-            await client["ws"].send_text(encode(MsgType.TCP_CLOSE, channel_id=channel_id))
         self._tcp_queues.pop(channel_id, None)
         self._channel_owner.pop(channel_id, None)
+        await self._send(client_id, encode(MsgType.TCP_CLOSE, channel_id=channel_id))
 
     # ------------------------------------------------------------------ 规则推送
 
     async def push_rules(self, client_id: str, rules: list) -> None:
-        client = self._clients.get(client_id)
-        if client:
-            await client["ws"].send_text(encode(MsgType.RULES_PUSH, payload={"rules": rules}))
-            logger.info(f"Rules pushed to {client_id}: {len(rules)} rules")
+        await self._send(client_id, encode(MsgType.RULES_PUSH, payload={"rules": rules}))
+        logger.info(f"Rules pushed to {client_id}: {len(rules)} rules")
 
     # ------------------------------------------------------------------ 心跳检测
 
@@ -192,7 +195,7 @@ class TunnelManager:
                     dead.append(client_id)
                 else:
                     try:
-                        await info["ws"].send_text(encode(MsgType.HEARTBEAT))
+                        await self._send(client_id, encode(MsgType.HEARTBEAT))
                     except Exception:
                         dead.append(client_id)
             for client_id in dead:
