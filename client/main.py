@@ -50,17 +50,25 @@ async def run_once(config: dict):
         client_state.connected_at = time.time()
         logger.info("Connected")
 
+        # 多个并发 TCP channel 的 asyncio.Task 会同时调用 ws.send()，
+        # 必须加锁串行化，否则 WebSocket 帧会损坏导致数据混乱。
+        _ws_lock = asyncio.Lock()
+
+        async def ws_send(text: str) -> None:
+            async with _ws_lock:
+                await ws.send(text)
+
         # 注册
-        await ws.send(encode(MsgType.REGISTER, payload={
+        await ws_send(encode(MsgType.REGISTER, payload={
             "token": token, "client_id": client_id
         }))
         logger.info("Registered, waiting for rules...")
 
         async def send_tcp_data(channel_id: str, data: bytes):
-            await ws.send(encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
+            await ws_send(encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
 
         async def send_tcp_close(channel_id: str):
-            await ws.send(encode(MsgType.TCP_CLOSE, channel_id=channel_id))
+            await ws_send(encode(MsgType.TCP_CLOSE, channel_id=channel_id))
 
         async for raw in ws:
             msg        = decode(raw)
@@ -76,7 +84,7 @@ async def run_once(config: dict):
                                 f"-> {r['local_host']}:{r['local_port']}")
 
             elif msg_type == MsgType.HEARTBEAT:
-                await ws.send(encode(MsgType.HEARTBEAT_ACK))
+                await ws_send(encode(MsgType.HEARTBEAT_ACK))
 
             elif msg_type == MsgType.HTTP_REQUEST:
                 asyncio.create_task(

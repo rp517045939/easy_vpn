@@ -172,8 +172,10 @@ class TunnelManager:
         await self._send(client_id, encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
 
     async def close_tcp_channel(self, client_id: str, channel_id: str) -> None:
-        self._tcp_queues.pop(channel_id, None)
+        queue = self._tcp_queues.pop(channel_id, None)
         self._channel_owner.pop(channel_id, None)
+        if queue:
+            await queue.put(None)  # 唤醒 pipe_out，使其正常退出并关闭 writer
         await self._send(client_id, encode(MsgType.TCP_CLOSE, channel_id=channel_id))
 
     # ------------------------------------------------------------------ 规则推送
