@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动：初始化 TCP 监听器 + 心跳任务
+    # 启动：初始化 DB、TCP 监听器、心跳任务、流量 flush 任务
+    from traffic_db import init_db
+    await init_db()
     tcp_listener.set_tunnel_manager(tunnel_manager)
     for rule in rules_manager.get_all():
         if rule["type"] == "tcp" and rule.get("enabled", True):
@@ -32,11 +34,14 @@ async def lifespan(app: FastAPI):
                 rule["server_port"], rule["client_id"],
                 rule["local_host"], rule["local_port"],
             )
-    heartbeat_task = asyncio.create_task(tunnel_manager.heartbeat_loop())
+    heartbeat_task      = asyncio.create_task(tunnel_manager.heartbeat_loop())
+    traffic_flush_task  = asyncio.create_task(tunnel_manager.traffic_flush_loop())
     logger.info("easy_vpn server started")
     yield
-    # 关闭
+    # 关闭：取消任务，最后 flush 一次流量
     heartbeat_task.cancel()
+    traffic_flush_task.cancel()
+    await tunnel_manager._flush_traffic()
     await tcp_listener.stop_all()
     logger.info("easy_vpn server stopped")
 

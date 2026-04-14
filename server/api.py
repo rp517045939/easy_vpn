@@ -28,7 +28,13 @@ async def login(req: LoginRequest):
 
 @router.get("/clients")
 async def list_clients(user=Depends(get_current_user)):
-    return tunnel_manager.get_online_clients()
+    return await tunnel_manager.get_online_clients()
+
+
+@router.get("/traffic")
+async def list_traffic(user=Depends(get_current_user)):
+    """所有设备的流量（含离线历史），按最近活跃时间倒序。"""
+    return await tunnel_manager.get_all_traffic()
 
 
 # ------------------------------------------------------------------ 规则
@@ -135,11 +141,10 @@ async def available_ports(user=Depends(get_current_user)):
 
 @router.get("/stats")
 async def get_stats(user=Depends(get_current_user)):
-    clients = tunnel_manager.get_online_clients()
     all_rules = rules_manager.get_all()
     return {
-        "online_clients": len(clients),
-        "total_rules": len(all_rules),
-        "http_rules": sum(1 for r in all_rules if r["type"] == "http"),
-        "tcp_rules":  sum(1 for r in all_rules if r["type"] == "tcp"),
+        "online_clients": tunnel_manager.count_online(),
+        "total_rules":    len(all_rules),
+        "http_rules":     sum(1 for r in all_rules if r["type"] == "http"),
+        "tcp_rules":      sum(1 for r in all_rules if r["type"] == "tcp"),
     }

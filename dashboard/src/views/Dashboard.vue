@@ -65,6 +65,40 @@
         </div>
       </div>
 
+      <!-- 设备流量 -->
+      <div v-if="clients.length > 0" class="mb-12">
+        <div class="mb-6">
+          <h3 class="text-2xl font-bold text-slate-900">在线设备</h3>
+          <p class="text-slate-500 mt-1">本次连接流量统计（断线重置）</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="c in clients" :key="c.client_id"
+               class="card p-5 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
+                <span class="font-bold text-slate-900 font-mono">{{ c.client_id }}</span>
+              </div>
+              <span class="text-xs text-slate-400">{{ fmtUptime(c.online_seconds) }}</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="bg-indigo-50 rounded-xl p-3">
+                <div class="text-xs text-indigo-500 font-semibold mb-1">↑ 上行</div>
+                <div class="text-lg font-bold text-indigo-700 font-mono">{{ fmtBytes(c.traffic?.bytes_sent ?? 0) }}</div>
+              </div>
+              <div class="bg-violet-50 rounded-xl p-3">
+                <div class="text-xs text-violet-500 font-semibold mb-1">↓ 下行</div>
+                <div class="text-lg font-bold text-violet-700 font-mono">{{ fmtBytes(c.traffic?.bytes_recv ?? 0) }}</div>
+              </div>
+            </div>
+            <div class="flex justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
+              <span>HTTP 请求 <strong class="text-slate-700">{{ (c.traffic?.http_requests ?? 0).toLocaleString() }}</strong></span>
+              <span>TCP 连接 <strong class="text-slate-700">{{ (c.traffic?.tcp_connections ?? 0).toLocaleString() }}</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 规则列表 -->
       <div class="flex items-center justify-between mb-6">
         <div>
@@ -283,6 +317,19 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { clientApi, rulesApi, statsApi, portsApi } from '../api/index'
+
+function fmtBytes(n) {
+  if (!n || n === 0) return '0 B'
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(n) / Math.log(1024))
+  return (n / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i]
+}
+
+function fmtUptime(s) {
+  if (!s) return '-'
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60
+  return (h ? h + 'h ' : '') + (m ? m + 'm ' : '') + ss + 's'
+}
 
 const router = useRouter()
 const auth   = useAuthStore()

@@ -15,6 +15,8 @@ class TunnelManager:
         self._tcp_queues: dict[str, asyncio.Queue] = {}       # channel_id → Queue
         self._channel_owner: dict[str, str] = {}              # channel_id → client_id
         self._lock = asyncio.Lock()
+        # 流量统计：内存增量，定期 flush 到 SQLite
+        self._pending_traffic: dict[str, dict] = {}           # client_id → delta dict
 
     # ------------------------------------------------------------------ 连接管理
 
@@ -62,13 +64,19 @@ class TunnelManager:
                 await queue.put(None)
             self._channel_owner.pop(cid, None)
 
+        asyncio.create_task(self._flush_traffic())
         logger.info(f"Client disconnected: {client_id}")
 
     def is_online(self, client_id: str) -> bool:
         return client_id in self._clients
 
-    def get_online_clients(self) -> list:
+    def count_online(self) -> int:
+        return len(self._clients)
+
+    async def get_online_clients(self) -> list:
         from rules import rules_manager
+        traffic_map = await self._get_traffic_merged()
+        empty = {"bytes_in": 0, "bytes_out": 0, "http_requests": 0, "tcp_connections": 0}
         now = time.time()
         return [
             {
@@ -76,9 +84,66 @@ class TunnelManager:
                 "connected_at": info["connected_at"],
                 "online_seconds": int(now - info["connected_at"]),
                 "rules": rules_manager.get_by_client(cid),
+                "traffic": traffic_map.get(cid, empty),
             }
             for cid, info in self._clients.items()
         ]
+
+    # ------------------------------------------------------------------ 流量统计
+
+    def record_traffic(self, client_id: str, *,
+                       bytes_in: int = 0, bytes_out: int = 0,
+                       http_req: int = 0, tcp_conn: int = 0) -> None:
+        """内存累加，不阻塞事件循环。由 traffic_flush_loop 定期写入 SQLite。"""
+        if not client_id:
+            return
+        d = self._pending_traffic.setdefault(client_id, {
+            "bytes_in": 0, "bytes_out": 0,
+            "http_requests": 0, "tcp_connections": 0,
+            "last_active": 0,
+        })
+        d["bytes_in"]        += bytes_in
+        d["bytes_out"]       += bytes_out
+        d["http_requests"]   += http_req
+        d["tcp_connections"] += tcp_conn
+        d["last_active"]      = time.time()
+
+    async def _flush_traffic(self) -> None:
+        """将内存增量写入 SQLite，然后清空内存。"""
+        from traffic_db import flush_to_db
+        if not self._pending_traffic:
+            return
+        pending, self._pending_traffic = self._pending_traffic, {}
+        await flush_to_db(pending)
+
+    async def traffic_flush_loop(self) -> None:
+        """每 30 秒定期将流量增量写入数据库。"""
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await self._flush_traffic()
+            except Exception as e:
+                logger.error(f"Traffic flush error: {e}")
+
+    async def _get_traffic_merged(self) -> dict[str, dict]:
+        """返回 DB 历史 + 内存增量的合并结果。"""
+        from traffic_db import query_all
+        db_map = {r["client_id"]: dict(r) for r in await query_all()}
+        for cid, d in self._pending_traffic.items():
+            if cid in db_map:
+                for k in ("bytes_in", "bytes_out", "http_requests", "tcp_connections"):
+                    db_map[cid][k] += d.get(k, 0)
+                db_map[cid]["last_active"] = max(
+                    db_map[cid]["last_active"], d.get("last_active", 0)
+                )
+            else:
+                db_map[cid] = dict(d)
+        return db_map
+
+    async def get_all_traffic(self) -> list[dict]:
+        """返回所有设备流量列表（含离线历史）。"""
+        merged = await self._get_traffic_merged()
+        return list(merged.values())
 
     # ------------------------------------------------------------------ 发送（加锁防并发）
 
@@ -119,7 +184,9 @@ class TunnelManager:
         elif msg_type == MsgType.TCP_DATA:
             queue = self._tcp_queues.get(channel_id)
             if queue and msg.get("data"):
-                await queue.put(decode_data(msg["data"]))
+                raw = decode_data(msg["data"])
+                self.record_traffic(self._channel_owner.get(channel_id, ""), bytes_out=len(raw))
+                await queue.put(raw)
 
         elif msg_type == MsgType.TCP_CLOSE:
             queue = self._tcp_queues.pop(channel_id, None)
@@ -144,7 +211,12 @@ class TunnelManager:
         await self._send(client_id, encode(MsgType.HTTP_REQUEST, channel_id=channel_id, payload=request_data))
 
         try:
-            return await asyncio.wait_for(future, timeout=30.0)
+            result = await asyncio.wait_for(future, timeout=30.0)
+            # 统计 HTTP 流量
+            req_bytes  = len(request_data.get("body", "").encode("latin-1"))
+            resp_bytes = len(result.get("body", "").encode("latin-1"))
+            self.record_traffic(client_id, bytes_in=req_bytes, bytes_out=resp_bytes, http_req=1)
+            return result
         except asyncio.TimeoutError:
             self._http_channels.pop(channel_id, None)
             self._channel_owner.pop(channel_id, None)
@@ -162,6 +234,7 @@ class TunnelManager:
         self._tcp_queues[channel_id] = queue
         self._channel_owner[channel_id] = client_id
 
+        self.record_traffic(client_id, tcp_conn=1)
         await self._send(client_id, encode(
             MsgType.TCP_OPEN, channel_id=channel_id,
             payload={"local_host": local_host, "local_port": local_port}
@@ -169,6 +242,7 @@ class TunnelManager:
         return queue
 
     async def send_tcp_data(self, client_id: str, channel_id: str, data: bytes) -> None:
+        self.record_traffic(client_id, bytes_in=len(data))
         await self._send(client_id, encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
 
     async def close_tcp_channel(self, client_id: str, channel_id: str) -> None:

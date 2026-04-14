@@ -138,6 +138,7 @@ async def run(config_path: str):
         finally:
             client_state.status       = "disconnected"
             client_state.connected_at = None
+            client_state.reset_traffic()
 
         # 等待重试或配置变更
         logger.info(f"Reconnecting in {retry_delay}s...")

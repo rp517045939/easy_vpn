@@ -52,3 +52,7 @@ export const portsApi = {
 export const statsApi = {
   get: () => http.get('/stats'),
 }
+
+export const trafficApi = {
+  getAll: () => http.get('/traffic'),
+}

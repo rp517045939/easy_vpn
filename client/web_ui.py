@@ -132,6 +132,18 @@ _HTML = r"""<!DOCTYPE html>
         <span class="info-label">在线时长</span>
         <span class="info-value" id="iUptime">-</span>
       </div>
+      <div class="info-row">
+        <span class="info-label">↑ 上行（本次）</span>
+        <span class="info-value" id="iBytesSent">-</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">↓ 下行（本次）</span>
+        <span class="info-value" id="iBytesRecv">-</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">HTTP 请求 / TCP 连接</span>
+        <span class="info-value" id="iReqCount">-</span>
+      </div>
     </div>
   </div>
 
@@ -183,6 +195,13 @@ _HTML = r"""<!DOCTYPE html>
 <script>
 let uptimeBase = 0, uptimeTimer = null
 
+function fmtBytes(n) {
+  if (n === 0) return '0 B'
+  const u = ['B','KB','MB','GB','TB']
+  const i = Math.floor(Math.log(n) / Math.log(1024))
+  return (n / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i]
+}
+
 // ── 状态轮询 ──────────────────────────────
 async function fetchStatus() {
   try {
@@ -213,6 +232,17 @@ async function fetchStatus() {
       clearInterval(uptimeTimer); uptimeTimer = null
       document.getElementById('iUptime').textContent = '-'
     }
+
+    // 流量
+    const t = d.traffic || {}
+    document.getElementById('iBytesSent').textContent =
+      d.status === 'connected' ? fmtBytes(t.bytes_sent || 0) : '-'
+    document.getElementById('iBytesRecv').textContent =
+      d.status === 'connected' ? fmtBytes(t.bytes_recv || 0) : '-'
+    document.getElementById('iReqCount').textContent =
+      d.status === 'connected'
+        ? `${(t.http_requests || 0).toLocaleString()} / ${(t.tcp_connections || 0).toLocaleString()}`
+        : '-'
 
     // 规则
     renderRules(d.rules || [])

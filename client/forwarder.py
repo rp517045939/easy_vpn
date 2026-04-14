@@ -3,6 +3,8 @@ import aiohttp
 import logging
 from typing import Callable
 
+from state import client_state
+
 logger = logging.getLogger(__name__)
 
 # channel_id → asyncio.StreamWriter（本地 TCP 连接）
@@ -38,6 +40,12 @@ async def forward_http(local_host: str, local_port: int, request_data: dict) -> 
                 allow_redirects=False,
             ) as resp:
                 resp_body = await resp.read()
+                # 统计流量：recv = 收到的请求字节，sent = 发回的响应字节
+                client_state.record_traffic(
+                    recv=len(raw_body) if raw_body else 0,
+                    sent=len(resp_body),
+                    http_req=1,
+                )
                 return {
                     "status_code": resp.status,
                     "headers":     dict(resp.headers),
@@ -62,14 +70,16 @@ async def open_tcp(local_host: str, local_port: int,
     try:
         reader, writer = await asyncio.open_connection(local_host, local_port)
         _tcp_writers[channel_id] = writer
+        client_state.record_traffic(tcp_conn=1)
         logger.info(f"TCP channel {channel_id[:8]} -> {local_host}:{local_port}")
 
-        # 本地 TCP → Server
+        # 本地 TCP → Server（上行：本地服务 → 发给 server）
         try:
             while True:
                 data = await reader.read(65536)
                 if not data:
                     break
+                client_state.record_traffic(sent=len(data))
                 await send_data_fn(channel_id, data)
         except Exception as e:
             logger.debug(f"TCP read {channel_id[:8]}: {e}")
@@ -93,6 +103,7 @@ async def write_tcp(channel_id: str, data: bytes) -> None:
         try:
             writer.write(data)
             await writer.drain()
+            client_state.record_traffic(recv=len(data))
         except Exception as e:
             logger.error(f"TCP write {channel_id[:8]}: {e}")
 
