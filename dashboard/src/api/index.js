@@ -54,5 +54,6 @@ export const statsApi = {
 }
 
 export const trafficApi = {
-  getAll: () => http.get('/traffic'),
+  getAll:    ()           => http.get('/traffic'),
+  getDetail: (clientId)  => http.get(`/traffic/${clientId}`),
 }

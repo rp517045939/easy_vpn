@@ -5,7 +5,7 @@
       <div class="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full bg-indigo-200/40 blur-3xl animate-pulse duration-[4000ms]"></div>
       <div class="absolute top-[20%] -right-[10%] w-[60%] h-[60%] rounded-full bg-violet-200/40 blur-3xl animate-pulse duration-[5000ms]"></div>
     </div>
-    
+
     <!-- 顶栏 -->
     <header class="relative z-10 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
@@ -65,35 +65,45 @@
         </div>
       </div>
 
-      <!-- 设备流量 -->
-      <div v-if="clients.length > 0" class="mb-12">
+      <!-- 设备列表 -->
+      <div v-if="allDevices.length > 0" class="mb-12">
         <div class="mb-6">
-          <h3 class="text-2xl font-bold text-slate-900">在线设备</h3>
-          <p class="text-slate-500 mt-1">本次连接流量统计（断线重置）</p>
+          <h3 class="text-2xl font-bold text-slate-900">设备概览</h3>
+          <p class="text-slate-500 mt-1">点击卡片查看详细流量历史</p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div v-for="c in clients" :key="c.client_id"
-               class="card p-5 flex flex-col gap-4">
+          <div v-for="d in allDevices" :key="d.client_id"
+               class="card p-5 flex flex-col gap-4 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.98]"
+               @click="openDetail(d.client_id)">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
-                <span class="font-bold text-slate-900 font-mono">{{ c.client_id }}</span>
+                <span v-if="d.online"
+                      class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
+                <span v-else class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                <span class="font-bold text-slate-900 font-mono">{{ d.client_id }}</span>
               </div>
-              <span class="text-xs text-slate-400">{{ fmtUptime(c.online_seconds) }}</span>
+              <div class="flex items-center gap-2">
+                <span v-if="d.online" class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">在线</span>
+                <span v-else class="text-xs text-slate-400">{{ fmtTime(d.last_active) }}</span>
+                <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+              </div>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div class="bg-indigo-50 rounded-xl p-3">
                 <div class="text-xs text-indigo-500 font-semibold mb-1">↑ 上行</div>
-                <div class="text-lg font-bold text-indigo-700 font-mono">{{ fmtBytes(c.traffic?.bytes_sent ?? 0) }}</div>
+                <div class="text-lg font-bold text-indigo-700 font-mono">{{ fmtBytes(d.bytes_out) }}</div>
               </div>
               <div class="bg-violet-50 rounded-xl p-3">
                 <div class="text-xs text-violet-500 font-semibold mb-1">↓ 下行</div>
-                <div class="text-lg font-bold text-violet-700 font-mono">{{ fmtBytes(c.traffic?.bytes_recv ?? 0) }}</div>
+                <div class="text-lg font-bold text-violet-700 font-mono">{{ fmtBytes(d.bytes_in) }}</div>
               </div>
             </div>
             <div class="flex justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
-              <span>HTTP 请求 <strong class="text-slate-700">{{ (c.traffic?.http_requests ?? 0).toLocaleString() }}</strong></span>
-              <span>TCP 连接 <strong class="text-slate-700">{{ (c.traffic?.tcp_connections ?? 0).toLocaleString() }}</strong></span>
+              <span>HTTP <strong class="text-slate-700">{{ (d.http_requests ?? 0).toLocaleString() }}</strong></span>
+              <span>TCP <strong class="text-slate-700">{{ (d.tcp_connections ?? 0).toLocaleString() }}</strong></span>
+              <span v-if="d.online" class="text-emerald-600">在线 {{ fmtUptime(d.online_seconds) }}</span>
             </div>
           </div>
         </div>
@@ -196,7 +206,7 @@
     <Transition name="modal">
       <div v-if="modal.visible" class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
         <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" @click="modal.visible = false; clientDropdownOpen = false"></div>
-        
+
         <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
           <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <h4 class="text-lg font-bold text-slate-900">{{ modal.rule.id ? '编辑规则' : '新增规则' }}</h4>
@@ -213,7 +223,7 @@
                 <option value="tcp">TCP（SSH 等）</option>
               </select>
             </div>
-            
+
             <div>
               <label class="label">设备 ID (Client ID)</label>
               <div class="relative" v-click-outside="() => clientDropdownOpen = false">
@@ -286,7 +296,7 @@
                 <input v-model.number="modal.rule.local_port" type="number" placeholder="22" class="input-field font-mono text-sm" />
               </div>
             </div>
-            
+
             <div>
               <label class="label">备注 (可选)</label>
               <input v-model="modal.rule.label" placeholder="如 Mac SSH" class="input-field" />
@@ -309,6 +319,118 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 设备详情抽屉 -->
+    <Transition name="drawer">
+      <div v-if="detail.visible" class="fixed inset-0 z-50 flex justify-end">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" @click="detail.visible = false"></div>
+        <div class="relative w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
+          <!-- 抽屉顶部 -->
+          <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-slate-900 font-mono text-lg">{{ detail.clientId }}</span>
+                  <span v-if="isOnline(detail.clientId)"
+                        class="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">在线</span>
+                  <span v-else class="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">离线</span>
+                </div>
+                <div class="text-xs text-slate-400 mt-0.5">流量历史统计</div>
+              </div>
+            </div>
+            <button class="text-slate-400 hover:text-slate-600 transition-colors p-1" @click="detail.visible = false">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <!-- 抽屉内容 -->
+          <div class="flex-1 overflow-y-auto p-6 space-y-6">
+            <!-- 加载状态 -->
+            <div v-if="detail.loading" class="flex items-center justify-center py-16">
+              <div class="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+            </div>
+
+            <template v-else-if="detail.data">
+              <!-- 今日 / 本月 / 本年 -->
+              <div>
+                <div class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">流量汇总</div>
+                <div class="grid grid-cols-3 gap-3">
+                  <div v-for="item in summaryCards" :key="item.label"
+                       :class="['rounded-xl p-4 flex flex-col gap-1', item.bg]">
+                    <div :class="['text-xs font-bold uppercase tracking-wider mb-1', item.label_color]">{{ item.label }}</div>
+                    <div :class="['text-base font-bold font-mono', item.value_color]">
+                      ↑ {{ fmtBytes(item.data.bytes_out) }}
+                    </div>
+                    <div :class="['text-base font-bold font-mono', item.value_color2]">
+                      ↓ {{ fmtBytes(item.data.bytes_in) }}
+                    </div>
+                    <div class="text-xs text-slate-400 mt-1">
+                      HTTP {{ (item.data.http_requests || 0).toLocaleString() }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 累计总量 -->
+              <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">累计总量</div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">↑ 上行总计</div>
+                    <div class="text-xl font-bold text-slate-800 font-mono">{{ fmtBytes(detail.data.total.bytes_out) }}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">↓ 下行总计</div>
+                    <div class="text-xl font-bold text-slate-800 font-mono">{{ fmtBytes(detail.data.total.bytes_in) }}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">HTTP 请求</div>
+                    <div class="text-lg font-bold text-slate-700 font-mono">{{ (detail.data.total.http_requests || 0).toLocaleString() }}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-slate-400 mb-1">TCP 连接</div>
+                    <div class="text-lg font-bold text-slate-700 font-mono">{{ (detail.data.total.tcp_connections || 0).toLocaleString() }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 近 30 天明细 -->
+              <div>
+                <div class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">近 30 天明细</div>
+                <div v-if="detail.data.daily.length === 0"
+                     class="text-center py-8 text-slate-400 text-sm bg-slate-50 rounded-xl">
+                  暂无历史记录（数据从启用此功能后开始累积）
+                </div>
+                <div v-else class="rounded-xl border border-slate-100 overflow-hidden">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-100">
+                        <th class="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase">日期</th>
+                        <th class="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">↑ 上行</th>
+                        <th class="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">↓ 下行</th>
+                        <th class="py-3 px-4 text-right text-xs font-bold text-slate-500 uppercase">HTTP</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50">
+                      <tr v-for="row in detail.data.daily" :key="row.date"
+                          class="hover:bg-slate-50 transition-colors">
+                        <td class="py-3 px-4 font-mono text-slate-600">{{ row.date }}</td>
+                        <td class="py-3 px-4 text-right font-mono text-indigo-600">{{ fmtBytes(row.bytes_out) }}</td>
+                        <td class="py-3 px-4 text-right font-mono text-violet-600">{{ fmtBytes(row.bytes_in) }}</td>
+                        <td class="py-3 px-4 text-right text-slate-500">{{ (row.http_requests || 0).toLocaleString() }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -316,7 +438,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { clientApi, rulesApi, statsApi, portsApi } from '../api/index'
+import { clientApi, rulesApi, statsApi, portsApi, trafficApi } from '../api/index'
 
 function fmtBytes(n) {
   if (!n || n === 0) return '0 B'
@@ -331,13 +453,25 @@ function fmtUptime(s) {
   return (h ? h + 'h ' : '') + (m ? m + 'm ' : '') + ss + 's'
 }
 
+function fmtTime(ts) {
+  if (!ts) return '从未连接'
+  const d = new Date(ts * 1000)
+  const now = new Date()
+  const diff = Math.floor((now - d) / 1000)
+  if (diff < 60)   return `${diff}秒前`
+  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
+  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+}
+
 const router = useRouter()
 const auth   = useAuthStore()
 
-const clients           = ref([])
-const rules             = ref([])
-const stats             = ref({})
-const availablePorts    = ref([])
+const clients            = ref([])
+const allTraffic         = ref([])
+const rules              = ref([])
+const stats              = ref({})
+const availablePorts     = ref([])
 const clientDropdownOpen = ref(false)
 
 // v-click-outside 指令
@@ -354,7 +488,41 @@ const vClickOutside = {
 const onlineCount = computed(() => clients.value.length)
 const isOnline    = (clientId) => clients.value.some(c => c.client_id === clientId)
 
-// 弹窗状态
+// 合并在线设备 + 历史流量，全量展示
+const allDevices = computed(() => {
+  const onlineMap = Object.fromEntries(clients.value.map(c => [c.client_id, c]))
+  // 以历史流量为基准（包含离线设备）
+  const fromHistory = allTraffic.value.map(t => {
+    const onlineInfo = onlineMap[t.client_id]
+    return {
+      client_id:       t.client_id,
+      online:          !!onlineInfo,
+      online_seconds:  onlineInfo?.online_seconds ?? 0,
+      last_active:     t.last_active,
+      bytes_in:        t.bytes_in        + (onlineInfo?.traffic?.bytes_recv  ?? 0),
+      bytes_out:       t.bytes_out       + (onlineInfo?.traffic?.bytes_sent  ?? 0),
+      http_requests:   t.http_requests   + (onlineInfo?.traffic?.http_requests  ?? 0),
+      tcp_connections: t.tcp_connections + (onlineInfo?.traffic?.tcp_connections ?? 0),
+    }
+  })
+  // 在线设备中有但历史里没有的（首次连接）
+  const historyIds = new Set(allTraffic.value.map(t => t.client_id))
+  const onlyOnline = clients.value
+    .filter(c => !historyIds.has(c.client_id))
+    .map(c => ({
+      client_id:       c.client_id,
+      online:          true,
+      online_seconds:  c.online_seconds,
+      last_active:     c.connected_at,
+      bytes_in:        c.traffic?.bytes_recv       ?? 0,
+      bytes_out:       c.traffic?.bytes_sent        ?? 0,
+      http_requests:   c.traffic?.http_requests     ?? 0,
+      tcp_connections: c.traffic?.tcp_connections   ?? 0,
+    }))
+  return [...onlyOnline, ...fromHistory]
+})
+
+// ── 规则弹窗 ─────────────────────────────────────────────────────────────
 const modal = ref({
   visible: false,
   saving:  false,
@@ -411,11 +579,58 @@ async function deleteRule(rule) {
   await refresh()
 }
 
+// ── 设备详情抽屉 ─────────────────────────────────────────────────────────
+const detail = ref({
+  visible:  false,
+  clientId: '',
+  loading:  false,
+  data:     null,
+})
+
+const summaryCards = computed(() => {
+  if (!detail.value.data) return []
+  return [
+    {
+      label: '今日', data: detail.value.data.today,
+      bg: 'bg-indigo-50', label_color: 'text-indigo-500',
+      value_color: 'text-indigo-700', value_color2: 'text-indigo-600',
+    },
+    {
+      label: '本月', data: detail.value.data.month,
+      bg: 'bg-violet-50', label_color: 'text-violet-500',
+      value_color: 'text-violet-700', value_color2: 'text-violet-600',
+    },
+    {
+      label: '本年', data: detail.value.data.year,
+      bg: 'bg-emerald-50', label_color: 'text-emerald-500',
+      value_color: 'text-emerald-700', value_color2: 'text-emerald-600',
+    },
+  ]
+})
+
+async function openDetail(clientId) {
+  detail.value.visible  = true
+  detail.value.clientId = clientId
+  detail.value.loading  = true
+  detail.value.data     = null
+  try {
+    detail.value.data = await trafficApi.getDetail(clientId)
+  } catch {
+    detail.value.data = null
+  } finally {
+    detail.value.loading = false
+  }
+}
+
+// ── 数据刷新 ─────────────────────────────────────────────────────────────
 async function refresh() {
-  const [c, r, s] = await Promise.all([clientApi.list(), rulesApi.list(), statsApi.get()])
-  clients.value = c
-  rules.value   = r
-  stats.value   = s
+  const [c, t, r, s] = await Promise.all([
+    clientApi.list(), trafficApi.getAll(), rulesApi.list(), statsApi.get()
+  ])
+  clients.value    = c
+  allTraffic.value = t
+  rules.value      = r
+  stats.value      = s
 }
 
 function logout() {
@@ -423,7 +638,6 @@ function logout() {
   router.push('/login')
 }
 
-// 每 10 秒自动刷新在线状态
 let timer
 onMounted(async () => { await refresh(); timer = setInterval(refresh, 10000) })
 onUnmounted(() => clearInterval(timer))
@@ -437,6 +651,10 @@ onUnmounted(() => clearInterval(timer))
 .modal-enter-active, .modal-leave-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
 .modal-enter-from .transform, .modal-leave-to .transform { transform: scale(0.95) translateY(20px); }
+
+.drawer-enter-active, .drawer-leave-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.drawer-enter-from, .drawer-leave-to { opacity: 0; }
+.drawer-enter-from .relative, .drawer-leave-to .relative { transform: translateX(100%); }
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }

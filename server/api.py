@@ -37,6 +37,14 @@ async def list_traffic(user=Depends(get_current_user)):
     return await tunnel_manager.get_all_traffic()
 
 
+@router.get("/traffic/{client_id}")
+async def get_client_traffic(client_id: str, user=Depends(get_current_user)):
+    """指定设备的今日/本月/本年流量及近 30 天明细。先 flush 确保数据最新。"""
+    await tunnel_manager._flush_traffic()
+    from traffic_db import query_client_detail
+    return await query_client_detail(client_id)
+
+
 # ------------------------------------------------------------------ 规则
 
 @router.get("/rules")
