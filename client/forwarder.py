@@ -52,8 +52,9 @@ async def forward_http(local_host: str, local_port: int, request_data: dict) -> 
                     "body":        resp_body.decode("latin-1"),
                 }
     except Exception as e:
-        logger.error(f"HTTP forward error [{local_host}:{local_port}]: {e}")
-        return {"status_code": 502, "headers": {}, "body": f"Bad Gateway: {e}"}
+        err = f"{type(e).__name__}: {e!r}"
+        logger.error(f"HTTP forward error [{local_host}:{local_port}]: {err}")
+        return {"status_code": 502, "headers": {}, "body": f"Bad Gateway: {err}"}
 
 
 # ------------------------------------------------------------------ TCP

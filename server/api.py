@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from auth import create_access_token, verify_admin, get_current_user
+from config import settings
 from rules import rules_manager
 from tunnel_manager import tunnel_manager
 

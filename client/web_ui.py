@@ -276,8 +276,9 @@ function renderRules(rules) {
   </table>`
 }
 
-// ── 日志 SSE ─────────────────────────────
+// ── 日志轮询 ─────────────────────────────
 const logWrap = document.getElementById('logWrap')
+let lastLogsSignature = ''
 
 function appendLog(line) {
   const lvl = /\] (\w+)/.exec(line)?.[1] || 'INFO'
@@ -293,14 +294,19 @@ function appendLog(line) {
 
 function clearLogs() { logWrap.innerHTML = '' }
 
-function connectSSE() {
-  const es = new EventSource('/api/logs/stream')
-  es.addEventListener('log', e => appendLog(e.data))
-  es.addEventListener('history', e => {
-    const lines = JSON.parse(e.data)
-    lines.forEach(appendLog)
-  })
-  es.onerror = () => { es.close(); setTimeout(connectSSE, 3000) }
+function renderLogs(lines) {
+  const signature = JSON.stringify(lines)
+  if (signature === lastLogsSignature) return
+  lastLogsSignature = signature
+  logWrap.innerHTML = ''
+  lines.forEach(appendLog)
+}
+
+async function fetchLogs() {
+  try {
+    const lines = await fetch('/api/logs').then(r => r.json())
+    renderLogs(lines)
+  } catch(e) { /* 忽略 */ }
 }
 
 // ── 配置保存 ─────────────────────────────
@@ -324,7 +330,8 @@ async function saveConfig() {
 // ── 启动 ──────────────────────────────────
 fetchStatus()
 setInterval(fetchStatus, 3000)
-connectSSE()
+fetchLogs()
+setInterval(fetchLogs, 3000)
 </script>
 </body>
 </html>"""
@@ -371,6 +378,11 @@ async def handle_logs_stream(request):
     return response
 
 
+async def handle_logs(request):
+    """返回当前日志缓冲，供代理场景下轮询读取。"""
+    return web.json_response(client_state.get_log_buffer())
+
+
 async def handle_get_config(request):
     try:
         with open(client_state.config_path, encoding="utf-8") as f:
@@ -413,6 +425,7 @@ def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/",                  handle_index)
     app.router.add_get("/api/status",        handle_status)
+    app.router.add_get("/api/logs",          handle_logs)
     app.router.add_get("/api/logs/stream",   handle_logs_stream)
     app.router.add_get("/api/config",        handle_get_config)
     app.router.add_put("/api/config",        handle_put_config)
