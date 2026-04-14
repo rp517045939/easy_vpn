@@ -138,6 +138,14 @@ async def delete_rule(rule_id: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 
+# ------------------------------------------------------------------ 公开配置
+
+@router.get("/config")
+async def get_config():
+    """返回前端需要的公开配置（无需登录）。"""
+    return {"http_domain": settings.http_domain}
+
+
 # ------------------------------------------------------------------ 端口
 
 @router.get("/ports/available")

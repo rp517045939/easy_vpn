@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # 管理面板的域名，用于区分面板请求和隧道请求
     panel_host: str = "vpn.ruanpengpeng.cn"
 
+    # HTTP 隧道子域名的根域名（UI 中显示的后缀，如 .vpn.ruanpengpeng.cn）
+    http_domain: str = "vpn.ruanpengpeng.cn"
+
     # TCP 隧道端口范围
     tcp_port_min: int = 2200
     tcp_port_max: int = 2299

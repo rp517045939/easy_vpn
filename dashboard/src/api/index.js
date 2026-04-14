@@ -46,7 +46,11 @@ export const rulesApi = {
 }
 
 export const portsApi = {
-  available: () => http.get('/ports/available'),  // 查询可用 TCP 端口（2200-2299）
+  available: () => http.get('/ports/available'),
+}
+
+export const configApi = {
+  get: () => http.get('/config'),
 }
 
 export const statsApi = {

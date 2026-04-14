@@ -270,11 +270,9 @@
               <div>
                 <label class="label">子域名</label>
                 <div class="relative">
-                  <input v-model="modal.rule.subdomain" placeholder="如 nas" class="input-field font-mono text-sm pl-4 pr-32" />
-                  <div class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-                    <span class="text-slate-400 text-sm font-mono">.ruanpengpeng.cn</span>
-                  </div>
+                  <input v-model="modal.rule.subdomain" :placeholder="`如 nas.${httpDomain}`" class="input-field font-mono text-sm" />
                 </div>
+                <p class="mt-1 text-xs text-slate-400">填写完整域名，如 <code class="bg-slate-100 px-1 rounded">nas.{{ httpDomain }}</code></p>
               </div>
             </template>
             <template v-else>
@@ -438,7 +436,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { clientApi, rulesApi, statsApi, portsApi, trafficApi } from '../api/index'
+import { clientApi, rulesApi, statsApi, portsApi, trafficApi, configApi } from '../api/index'
 
 function fmtBytes(n) {
   if (!n || n === 0) return '0 B'
@@ -473,6 +471,7 @@ const rules              = ref([])
 const stats              = ref({})
 const availablePorts     = ref([])
 const clientDropdownOpen = ref(false)
+const httpDomain         = ref('')
 
 // v-click-outside 指令
 const vClickOutside = {
@@ -639,7 +638,11 @@ function logout() {
 }
 
 let timer
-onMounted(async () => { await refresh(); timer = setInterval(refresh, 10000) })
+onMounted(async () => {
+  try { const cfg = await configApi.get(); httpDomain.value = cfg.http_domain } catch {}
+  await refresh()
+  timer = setInterval(refresh, 10000)
+})
 onUnmounted(() => clearInterval(timer))
 </script>
 
