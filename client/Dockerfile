@@ -9,4 +9,5 @@ COPY *.py ./
 
 EXPOSE 7070
 
-ENTRYPOINT ["python", "main.py", "--config", "/config/config.yml"]
+ENTRYPOINT ["python", "main.py"]
+CMD ["--config", "/config/config.yml"]

@@ -6,6 +6,6 @@ services:
     restart: unless-stopped
     network_mode: host          # 使用宿主机网络，方便访问 NAS 本地服务
     volumes:
-      - ./config:/config        # 配置目录挂载，config.yml 放在这里
+      - ./config.yml:/config/config.yml   # 把 config.yml 和 docker-compose.yml 放同一目录即可
     command: ["--config", "/config/config.yml", "--ui-host", "0.0.0.0"]
     # Web UI 在 host 模式下直接通过宿主机 IP:7070 访问，无需 ports 映射
