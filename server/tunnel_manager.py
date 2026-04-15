@@ -13,6 +13,7 @@ class TunnelManager:
         self._clients: dict[str, dict] = {}          # client_id → {ws, connected_at, last_heartbeat}
         self._http_channels: dict[str, asyncio.Future] = {}   # channel_id → Future
         self._tcp_queues: dict[str, asyncio.Queue] = {}       # channel_id → Queue
+        self._tcp_open_waiters: dict[str, asyncio.Future] = {} # channel_id → Future
         self._channel_owner: dict[str, str] = {}              # channel_id → client_id
         self._lock = asyncio.Lock()
         # 流量统计：内存增量，定期 flush 到 SQLite
@@ -59,6 +60,9 @@ class TunnelManager:
             future = self._http_channels.pop(cid, None)
             if future and not future.done():
                 future.set_exception(ConnectionError(f"Client {client_id} disconnected"))
+            open_waiter = self._tcp_open_waiters.pop(cid, None)
+            if open_waiter and not open_waiter.done():
+                open_waiter.set_exception(ConnectionError(f"Client {client_id} disconnected"))
             queue = self._tcp_queues.pop(cid, None)
             if queue:
                 await queue.put(None)
@@ -181,6 +185,11 @@ class TunnelManager:
             if future and not future.done():
                 future.set_result(msg.get("payload", {}))
 
+        elif msg_type == MsgType.TCP_OPENED:
+            open_waiter = self._tcp_open_waiters.pop(channel_id, None)
+            if open_waiter and not open_waiter.done():
+                open_waiter.set_result(True)
+
         elif msg_type == MsgType.TCP_DATA:
             queue = self._tcp_queues.get(channel_id)
             if queue and msg.get("data"):
@@ -189,6 +198,9 @@ class TunnelManager:
                 await queue.put(raw)
 
         elif msg_type == MsgType.TCP_CLOSE:
+            open_waiter = self._tcp_open_waiters.pop(channel_id, None)
+            if open_waiter and not open_waiter.done():
+                open_waiter.set_exception(ConnectionError(f"TCP channel {channel_id[:8]} failed to open"))
             queue = self._tcp_queues.pop(channel_id, None)
             self._channel_owner.pop(channel_id, None)
             if queue:
@@ -231,7 +243,9 @@ class TunnelManager:
             raise ConnectionError(f"Client {client_id} is not online")
 
         queue: asyncio.Queue = asyncio.Queue()
+        open_waiter: asyncio.Future = asyncio.get_running_loop().create_future()
         self._tcp_queues[channel_id] = queue
+        self._tcp_open_waiters[channel_id] = open_waiter
         self._channel_owner[channel_id] = client_id
 
         self.record_traffic(client_id, tcp_conn=1)
@@ -241,11 +255,27 @@ class TunnelManager:
         ))
         return queue
 
+    async def wait_tcp_ready(self, channel_id: str, timeout: float = 0.5) -> bool:
+        """
+        等待客户端确认本地 TCP 已连通。
+        - 新客户端会显式发送 TCP_OPENED。
+        - 旧客户端没有该握手，超时后继续，以兼容现网。
+        """
+        open_waiter = self._tcp_open_waiters.get(channel_id)
+        if not open_waiter:
+            return True
+        try:
+            await asyncio.wait_for(asyncio.shield(open_waiter), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
     async def send_tcp_data(self, client_id: str, channel_id: str, data: bytes) -> None:
         self.record_traffic(client_id, bytes_in=len(data))
         await self._send(client_id, encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
 
     async def close_tcp_channel(self, client_id: str, channel_id: str) -> None:
+        self._tcp_open_waiters.pop(channel_id, None)
         queue = self._tcp_queues.pop(channel_id, None)
         self._channel_owner.pop(channel_id, None)
         if queue:

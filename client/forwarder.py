@@ -61,6 +61,7 @@ async def forward_http(local_host: str, local_port: int, request_data: dict) -> 
 
 async def open_tcp(local_host: str, local_port: int,
                    channel_id: str,
+                   send_opened_fn: Callable, # send_opened_fn(channel_id)
                    send_data_fn: Callable,   # send_data_fn(channel_id, bytes)
                    send_close_fn: Callable   # send_close_fn(channel_id)
                    ) -> None:
@@ -73,6 +74,7 @@ async def open_tcp(local_host: str, local_port: int,
         _tcp_writers[channel_id] = writer
         client_state.record_traffic(tcp_conn=1)
         logger.info(f"TCP channel {channel_id[:8]} -> {local_host}:{local_port}")
+        await send_opened_fn(channel_id)
 
         # 本地 TCP → Server（上行：本地服务 → 发给 server）
         try:

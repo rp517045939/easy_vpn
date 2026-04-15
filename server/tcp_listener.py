@@ -55,6 +55,9 @@ class TcpListener:
             writer.close()
             return
 
+        if not await tm.wait_tcp_ready(channel_id, timeout=0.5):
+            logger.debug(f"TCP channel {channel_id[:8]} proceeding without explicit ready ack")
+
         async def pipe_in():
             """外部 TCP → WebSocket → Client"""
             try:

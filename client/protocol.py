@@ -16,6 +16,7 @@ class MsgType(str, Enum):
     HTTP_REQUEST  = "http_request"
     HTTP_RESPONSE = "http_response"
     TCP_OPEN      = "tcp_open"
+    TCP_OPENED    = "tcp_opened"
     TCP_DATA      = "tcp_data"
     TCP_CLOSE     = "tcp_close"
 

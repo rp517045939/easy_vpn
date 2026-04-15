@@ -67,6 +67,9 @@ async def run_once(config: dict):
         async def send_tcp_data(channel_id: str, data: bytes):
             await ws_send(encode(MsgType.TCP_DATA, channel_id=channel_id, data=data))
 
+        async def send_tcp_opened(channel_id: str):
+            await ws_send(encode(MsgType.TCP_OPENED, channel_id=channel_id))
+
         async def send_tcp_close(channel_id: str):
             await ws_send(encode(MsgType.TCP_CLOSE, channel_id=channel_id))
 
@@ -96,7 +99,7 @@ async def run_once(config: dict):
                 asyncio.create_task(
                     open_tcp(
                         payload["local_host"], payload["local_port"],
-                        channel_id, send_tcp_data, send_tcp_close
+                        channel_id, send_tcp_opened, send_tcp_data, send_tcp_close
                     )
                 )
 
