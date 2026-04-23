@@ -7,7 +7,7 @@
 #   sudo bash deploy/server_deploy.sh --skip-ssl    # 测试环境（跳过 SSL）
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 SKIP_SSL=false
 for arg in "$@"; do
@@ -31,10 +31,26 @@ info "项目目录：$PROJECT_DIR"
 # ---------- 0. 拉取最新代码 ----------
 info "===== 拉取最新代码 ====="
 if git -C "$PROJECT_DIR" remote get-url origin &>/dev/null; then
-    if git -C "$PROJECT_DIR" pull --timeout 30 origin main 2>&1; then
-        info "代码已更新到最新版本 ✓"
+    if ! git -C "$PROJECT_DIR" diff --quiet || \
+       ! git -C "$PROJECT_DIR" diff --cached --quiet || \
+       [ -n "$(git -C "$PROJECT_DIR" ls-files --others --exclude-standard)" ]; then
+        warning "检测到仓库存在本地修改或未跟踪文件，已跳过自动 git pull"
+        git -C "$PROJECT_DIR" status --short || true
+        warning "如需更新到远端最新版本，建议先备份本地改动，再执行："
+        warning "  git -C \"$PROJECT_DIR\" stash push -u -m \"pre-deploy backup\""
+        warning "  git -C \"$PROJECT_DIR\" pull --ff-only origin main"
     else
-        warning "git pull 失败（网络问题或已是最新），继续使用当前版本"
+        if command -v timeout &>/dev/null; then
+            GIT_PULL_CMD=(timeout 30s git -C "$PROJECT_DIR" pull --ff-only origin main)
+        else
+            GIT_PULL_CMD=(git -C "$PROJECT_DIR" pull --ff-only origin main)
+        fi
+
+        if "${GIT_PULL_CMD[@]}" 2>&1; then
+            info "代码已更新到最新版本 ✓"
+        else
+            warning "git pull 失败（网络问题、分支无法快进或远端不可达），继续使用当前版本"
+        fi
     fi
 else
     warning "未找到 git remote，跳过更新步骤"

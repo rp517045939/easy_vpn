@@ -110,8 +110,8 @@ docker logs -f easy_vpn    # 查看日志
 一键部署脚本（自动处理 Nginx + SSL）：
 
 ```bash
-bash deploy/install.sh              # 正式环境
-bash deploy/install.sh --test-skip-ssl  # 测试环境
+sudo bash deploy/server_deploy.sh        # 正式环境
+sudo bash deploy/server_deploy.sh --skip-ssl  # 测试环境
 ```
 
 ## 重要约束
