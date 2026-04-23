@@ -13,6 +13,7 @@ services:
       - .env
     volumes:
       - easy_vpn_data:/app/data        # 持久化隧道规则（rules.json）
+      - easy_vpn_logs:/app/logs        # 持久化服务端滚动日志
 
 networks:
   default:
@@ -21,3 +22,5 @@ networks:
 volumes:
   easy_vpn_data:
     name: easy_vpn_data
+  easy_vpn_logs:
+    name: easy_vpn_logs

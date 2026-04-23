@@ -7,6 +7,7 @@ easy_vpn Client
 import asyncio
 import argparse
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 import time
 from pathlib import Path
@@ -19,13 +20,97 @@ from protocol import MsgType, encode, decode, decode_data
 from forwarder import forward_http, open_tcp, write_tcp, close_tcp
 from state import client_state, StateLogHandler
 
-# ── 日志配置：同时输出到控制台和 Web UI ──────────────────────────────────
-_console_handler = logging.StreamHandler()
-_console_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-_state_handler = StateLogHandler()
-
-logging.basicConfig(level=logging.INFO, handlers=[_console_handler, _state_handler])
 logger = logging.getLogger("easy_vpn_client")
+
+LOG_RETENTION_DAYS = 7
+LOG_TOTAL_SIZE_LIMIT = 10 * 1024 * 1024 * 1024  # 10 GiB
+LOG_ROTATE_MAX_BYTES = 100 * 1024 * 1024        # 100 MiB / file
+LOG_ROTATE_BACKUP_COUNT = 120
+LOG_CLEANUP_INTERVAL = 3600                     # 1 hour
+
+
+def configure_logging(log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "easy_vpn_client.log"
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    state_handler = StateLogHandler()
+
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=LOG_ROTATE_MAX_BYTES,
+        backupCount=LOG_ROTATE_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(formatter)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[console_handler, state_handler, file_handler],
+        force=True,
+    )
+
+
+def _list_log_files(log_dir: Path) -> list[Path]:
+    return sorted(
+        [p for p in log_dir.glob("easy_vpn_client.log*") if p.is_file()],
+        key=lambda p: p.stat().st_mtime,
+    )
+
+
+def cleanup_log_dir(log_dir: Path) -> list[str]:
+    if not log_dir.exists():
+        return []
+
+    actions: list[str] = []
+    now = time.time()
+    expire_before = now - LOG_RETENTION_DAYS * 24 * 3600
+    files = _list_log_files(log_dir)
+
+    for path in files:
+        try:
+            if path.stat().st_mtime < expire_before:
+                size_mb = path.stat().st_size / (1024 * 1024)
+                path.unlink(missing_ok=True)
+                actions.append(f"deleted expired log: {path.name} ({size_mb:.1f} MiB)")
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            actions.append(f"failed to delete expired log {path.name}: {e}")
+
+    files = _list_log_files(log_dir)
+    total_size = sum(path.stat().st_size for path in files)
+    if total_size <= LOG_TOTAL_SIZE_LIMIT:
+        return actions
+
+    for path in files:
+        if total_size <= LOG_TOTAL_SIZE_LIMIT:
+            break
+        try:
+            size = path.stat().st_size
+            size_mb = size / (1024 * 1024)
+            path.unlink(missing_ok=True)
+            total_size -= size
+            actions.append(f"deleted oversized log: {path.name} ({size_mb:.1f} MiB)")
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            actions.append(f"failed to delete oversized log {path.name}: {e}")
+
+    return actions
+
+
+async def log_cleanup_loop(log_dir: Path) -> None:
+    while True:
+        try:
+            for action in cleanup_log_dir(log_dir):
+                logger.info(action)
+        except Exception as e:
+            logger.error(f"Log cleanup failed: {e}")
+        await asyncio.sleep(LOG_CLEANUP_INTERVAL)
 
 
 def load_config(path: str) -> dict:
@@ -73,6 +158,9 @@ async def run_once(config: dict):
         async def send_tcp_close(channel_id: str):
             await ws_send(encode(MsgType.TCP_CLOSE, channel_id=channel_id))
 
+        async def send_http_response(channel_id: str, response: dict):
+            await ws_send(encode(MsgType.HTTP_RESPONSE, channel_id=channel_id, payload=response))
+
         async for raw in ws:
             msg        = decode(raw)
             msg_type   = msg.get("type")
@@ -91,7 +179,7 @@ async def run_once(config: dict):
 
             elif msg_type == MsgType.HTTP_REQUEST:
                 asyncio.create_task(
-                    _handle_http(ws, channel_id, msg["payload"], client_state.rules)
+                    _handle_http(send_http_response, channel_id, msg["payload"], client_state.rules)
                 )
 
             elif msg_type == MsgType.TCP_OPEN:
@@ -153,18 +241,21 @@ async def run(config_path: str):
         retry_delay = min(retry_delay * 2, 60)
 
 
-async def _handle_http(ws, channel_id: str, request_data: dict, rules: list):
+async def _handle_http(send_http_response, channel_id: str, request_data: dict, rules: list):
     host = request_data.get("headers", {}).get("host", "").split(":")[0]
-    rule = next(
-        (r for r in rules if r["type"] == "http" and r["subdomain"] == host),
-        None
-    )
-    if rule:
-        response = await forward_http(rule["local_host"], rule["local_port"], request_data)
-    else:
-        response = {"status_code": 404, "headers": {}, "body": f"No rule for host: {host}"}
+    try:
+        rule = next(
+            (r for r in rules if r["type"] == "http" and r["subdomain"] == host),
+            None
+        )
+        if rule:
+            response = await forward_http(rule["local_host"], rule["local_port"], request_data)
+        else:
+            response = {"status_code": 404, "headers": {}, "body": f"No rule for host: {host}"}
 
-    await ws.send(encode(MsgType.HTTP_RESPONSE, channel_id=channel_id, payload=response))
+        await send_http_response(channel_id, response)
+    except Exception as e:
+        logger.exception(f"HTTP handler failed [{channel_id[:8]}] host={host}: {e}")
 
 
 if __name__ == "__main__":
@@ -180,8 +271,17 @@ if __name__ == "__main__":
         logger.error(f"Config file not found: {config_path}")
         sys.exit(1)
 
+    log_dir = config_path.resolve().parent / "logs"
+    configure_logging(log_dir)
+    for action in cleanup_log_dir(log_dir):
+        logger.info(action)
+    logger.info(f"File logging enabled: {log_dir / 'easy_vpn_client.log'}")
+
     async def main():
-        tasks = [asyncio.create_task(run(str(config_path)))]
+        tasks = [
+            asyncio.create_task(run(str(config_path))),
+            asyncio.create_task(log_cleanup_loop(log_dir)),
+        ]
         if not args.no_ui:
             from web_ui import start_web_ui
             tasks.append(asyncio.create_task(start_web_ui(host=args.ui_host, port=args.ui_port)))
