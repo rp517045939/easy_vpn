@@ -1,7 +1,9 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -15,11 +17,103 @@ from rules import rules_manager
 from tcp_listener import tcp_listener
 from tunnel_manager import tunnel_manager
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
+
+LOG_RETENTION_DAYS = 7
+LOG_TOTAL_SIZE_LIMIT = 10 * 1024 * 1024 * 1024  # 10 GiB
+LOG_ROTATE_MAX_BYTES = 100 * 1024 * 1024        # 100 MiB / file
+LOG_ROTATE_BACKUP_COUNT = 120
+LOG_CLEANUP_INTERVAL = 3600                     # 1 hour
+
+
+def configure_logging(log_dir: Path) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "easy_vpn_server.log"
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=LOG_ROTATE_MAX_BYTES,
+        backupCount=LOG_ROTATE_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(formatter)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[console_handler, file_handler],
+        force=True,
+    )
+
+
+def _list_log_files(log_dir: Path) -> list[Path]:
+    return sorted(
+        [p for p in log_dir.glob("easy_vpn_server.log*") if p.is_file()],
+        key=lambda p: p.stat().st_mtime,
+    )
+
+
+def cleanup_log_dir(log_dir: Path) -> list[str]:
+    if not log_dir.exists():
+        return []
+
+    actions: list[str] = []
+    now = time.time()
+    expire_before = now - LOG_RETENTION_DAYS * 24 * 3600
+    files = _list_log_files(log_dir)
+
+    for path in files:
+        try:
+            stat = path.stat()
+            if stat.st_mtime < expire_before:
+                size_mb = stat.st_size / (1024 * 1024)
+                path.unlink(missing_ok=True)
+                actions.append(f"deleted expired log: {path.name} ({size_mb:.1f} MiB)")
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            actions.append(f"failed to delete expired log {path.name}: {e}")
+
+    files = _list_log_files(log_dir)
+    total_size = sum(path.stat().st_size for path in files)
+    if total_size <= LOG_TOTAL_SIZE_LIMIT:
+        return actions
+
+    for path in files:
+        if total_size <= LOG_TOTAL_SIZE_LIMIT:
+            break
+        try:
+            size = path.stat().st_size
+            size_mb = size / (1024 * 1024)
+            path.unlink(missing_ok=True)
+            total_size -= size
+            actions.append(f"deleted oversized log: {path.name} ({size_mb:.1f} MiB)")
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            actions.append(f"failed to delete oversized log {path.name}: {e}")
+
+    return actions
+
+
+async def log_cleanup_loop(log_dir: Path) -> None:
+    while True:
+        try:
+            for action in cleanup_log_dir(log_dir):
+                logger.info(action)
+        except Exception as e:
+            logger.error(f"Log cleanup failed: {e}")
+        await asyncio.sleep(LOG_CLEANUP_INTERVAL)
+
+
+_log_dir = Path("logs")
+configure_logging(_log_dir)
+for _action in cleanup_log_dir(_log_dir):
+    logger.info(_action)
+logger.info(f"File logging enabled: {_log_dir / 'easy_vpn_server.log'}")
 
 
 @asynccontextmanager
@@ -36,11 +130,13 @@ async def lifespan(app: FastAPI):
             )
     heartbeat_task      = asyncio.create_task(tunnel_manager.heartbeat_loop())
     traffic_flush_task  = asyncio.create_task(tunnel_manager.traffic_flush_loop())
+    log_cleanup_task    = asyncio.create_task(log_cleanup_loop(_log_dir))
     logger.info("easy_vpn server started")
     yield
     # 关闭：取消任务，最后 flush 一次流量
     heartbeat_task.cancel()
     traffic_flush_task.cancel()
+    log_cleanup_task.cancel()
     await tunnel_manager._flush_traffic()
     await tcp_listener.stop_all()
     logger.info("easy_vpn server stopped")
