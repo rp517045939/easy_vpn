@@ -2,10 +2,10 @@
 Client 本地 Web 管理界面，默认监听 http://localhost:7070
 """
 import asyncio
-import base64
 import json
 import logging
 from pathlib import Path
+import secrets
 
 import yaml
 from aiohttp import web
@@ -14,28 +14,16 @@ from state import client_state
 
 logger = logging.getLogger(__name__)
 
-
-def _unauthorized() -> web.Response:
-    response = web.Response(text="Authentication required", status=401)
-    response.headers["WWW-Authenticate"] = 'Basic realm="easy_vpn client"'
-    return response
+SESSION_COOKIE = "easy_vpn_ui_session"
 
 
 @web.middleware
-async def basic_auth_middleware(request, handler):
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Basic "):
-        return _unauthorized()
+async def password_auth_middleware(request, handler):
+    if request.path in ("/login", "/api/login"):
+        return await handler(request)
 
-    try:
-        encoded = auth.split(" ", 1)[1]
-        decoded = base64.b64decode(encoded).decode("utf-8")
-        username, password = decoded.split(":", 1)
-    except Exception:
-        return _unauthorized()
-
-    if username != client_state.ui_username or password != client_state.ui_password:
-        return _unauthorized()
+    if request.cookies.get(SESSION_COOKIE) != getattr(client_state, "ui_session_token", ""):
+        raise web.HTTPFound("/login")
 
     return await handler(request)
 
@@ -363,10 +351,114 @@ setInterval(fetchLogs, 3000)
 </html>"""
 
 
+_LOGIN_HTML = r"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>easy_vpn · 登录</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(160deg, #eef2ff 0%, #f8fafc 45%, #e2e8f0 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #0f172a;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: rgba(255,255,255,.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .08);
+    padding: 28px;
+  }
+  .title { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+  .sub { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+  label { display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:8px; text-transform:uppercase; letter-spacing:.04em; }
+  input {
+    width: 100%; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 12px;
+    font-size: 14px; outline: none; transition: .15s border, .15s box-shadow;
+  }
+  input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+  button {
+    width: 100%; margin-top: 16px; border: none; border-radius: 12px; padding: 12px 14px;
+    background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; font-weight: 700;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.03); }
+  .error { color: #dc2626; font-size: 13px; min-height: 18px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">easy_vpn client</div>
+    <div class="sub">请输入本次启动生成的访问密码</div>
+    <label for="password">访问密码</label>
+    <input id="password" type="password" placeholder="请输入密码" autofocus />
+    <button onclick="login()">进入管理页面</button>
+    <div class="error" id="error"></div>
+  </div>
+<script>
+async function login() {
+  const password = document.getElementById('password').value
+  const error = document.getElementById('error')
+  error.textContent = ''
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    })
+    if (res.ok) {
+      window.location.href = '/'
+      return
+    }
+    error.textContent = '密码错误'
+  } catch {
+    error.textContent = '网络错误'
+  }
+}
+document.getElementById('password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') login()
+})
+</script>
+</body>
+</html>"""
+
+
 # ------------------------------------------------------------------ API
 
 async def handle_index(request):
     return web.Response(text=_HTML, content_type="text/html")
+
+
+async def handle_login_page(request):
+    return web.Response(text=_LOGIN_HTML, content_type="text/html")
+
+
+async def handle_login(request):
+    try:
+        body = await request.json()
+    except Exception:
+        return web.Response(text="invalid request", status=400)
+
+    if body.get("password") != client_state.ui_password:
+        return web.Response(text="invalid password", status=401)
+
+    response = web.json_response({"ok": True})
+    response.set_cookie(
+        SESSION_COOKIE,
+        client_state.ui_session_token,
+        httponly=True,
+        samesite="Lax",
+    )
+    return response
 
 
 async def handle_status(request):
@@ -448,8 +540,10 @@ async def handle_put_config(request):
 # ------------------------------------------------------------------ 启动
 
 def create_app() -> web.Application:
-    app = web.Application(middlewares=[basic_auth_middleware])
+    app = web.Application(middlewares=[password_auth_middleware])
     app.router.add_get("/",                  handle_index)
+    app.router.add_get("/login",             handle_login_page)
+    app.router.add_post("/api/login",        handle_login)
     app.router.add_get("/api/status",        handle_status)
     app.router.add_get("/api/logs",          handle_logs)
     app.router.add_get("/api/logs/stream",   handle_logs_stream)
@@ -459,6 +553,7 @@ def create_app() -> web.Application:
 
 
 async def start_web_ui(host: str = "127.0.0.1", port: int = 7070):
+    client_state.ui_session_token = secrets.token_urlsafe(24)
     app = create_app()
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
@@ -466,9 +561,8 @@ async def start_web_ui(host: str = "127.0.0.1", port: int = 7070):
     await site.start()
     logger.info("Web UI running at http://%s:%s", host, port)
     logger.info(
-        "Local admin UI credentials: url=http://%s:%s username=%s password=%s",
+        "Local admin UI credentials: url=http://%s:%s password=%s",
         host,
         port,
-        client_state.ui_username,
         client_state.ui_password,
     )

@@ -287,7 +287,6 @@ if __name__ == "__main__":
             from web_ui import start_web_ui
             client_state.ui_host = args.ui_host
             client_state.ui_port = args.ui_port
-            client_state.ui_username = "admin"
             client_state.ui_password = secrets.token_urlsafe(9)
             tasks.append(asyncio.create_task(start_web_ui(host=args.ui_host, port=args.ui_port)))
         await asyncio.gather(*tasks)

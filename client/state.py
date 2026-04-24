@@ -20,7 +20,6 @@ class ClientState:
         self.config_path: str = "config.yml"
         self.ui_host: str = "127.0.0.1"
         self.ui_port: int = 7070
-        self.ui_username: str = "admin"
         self.ui_password: str = ""
 
         self.reload_event: asyncio.Event | None = None  # 由 main.py 注入
