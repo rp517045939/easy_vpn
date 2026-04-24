@@ -40,7 +40,7 @@ npm run dev
 
 ```bash
 cd dashboard
-npm install
+npm ci
 npm run build
 ```
 
@@ -52,6 +52,17 @@ pip install -r requirements.txt
 python main.py --config config.yml         # 默认开启 Web UI localhost:7070
 python main.py --config config.yml --no-ui # 关闭 Web UI
 ```
+
+NAS Docker 启动 Client：
+
+```bash
+cd client
+cp config.example.yml config.yml
+echo 'EASY_VPN_UI_PASSWORD=change-this-password' > .env
+docker compose up -d --build
+```
+
+NAS 方案固定使用 `network_mode: host`，这样规则里的 `local_host: 127.0.0.1` 指向 NAS 宿主机本身。Web UI 监听 `0.0.0.0:7070`，用于从局域网访问 `http://NAS_IP:7070` 管理 Client；密码可通过同目录 `.env` 的 `EASY_VPN_UI_PASSWORD` 固定，留空时每次启动随机生成并写入容器日志。
 
 ## 架构概览
 

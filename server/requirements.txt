@@ -1,8 +1,8 @@
-fastapi
-uvicorn[standard]
-websockets
-python-jose[cryptography]
-passlib[bcrypt]
-pydantic-settings
-pyyaml
-aiosqlite
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+websockets==16.0
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+pydantic-settings==2.14.0
+PyYAML==6.0.3
+aiosqlite==0.22.1
