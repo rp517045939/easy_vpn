@@ -79,10 +79,10 @@ if "%NEEDS_INSTALL%"=="0" (
 
 if "%NEEDS_INSTALL%"=="1" (
     echo [INFO]  安装依赖...
-    "%VENV_DIR%\Scripts\pip" install -q -r "%REQS%"
+    "%VENV_DIR%\Scripts\python" -m pip install -q -r "%REQS%"
     if errorlevel 1 (
         echo [ERROR] 依赖安装失败，请检查网络或手动执行：
-        echo         %VENV_DIR%\Scripts\pip install -r %REQS%
+        echo         "%VENV_DIR%\Scripts\python" -m pip install -r "%REQS%"
         pause
         exit /b 1
     )

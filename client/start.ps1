@@ -88,8 +88,7 @@ if (-not (Test-Path $reqsStamp)) {
 
 if ($needsInstall) {
     Write-Info "安装依赖..."
-    $pip = Join-Path $VenvDir "Scripts\pip.exe"
-    & $pip install -q -r $reqs
+    & $venvPython -m pip install -q -r $reqs
     if ($LASTEXITCODE -ne 0) {
         Write-Err "依赖安装失败，请检查网络连接"
         Read-Host "按 Enter 退出"
