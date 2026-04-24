@@ -44,7 +44,7 @@ npm ci
 npm run build
 ```
 
-启动 Client：
+启动 Client（macOS / Linux）：
 
 ```bash
 cd client
@@ -52,6 +52,21 @@ pip install -r requirements.txt
 python main.py --config config.yml         # 默认开启 Web UI localhost:7070
 python main.py --config config.yml --no-ui # 关闭 Web UI
 ```
+
+启动 Client（Windows 11）：
+
+```
+# 方法一：双击 start.bat（自动创建 venv、安装依赖、启动）
+# 方法二：PowerShell（需 Python 3.10+）
+cd client
+.\start.ps1              # 默认开启 Web UI
+.\start.ps1 -NoUI        # 关闭 Web UI
+```
+
+> Windows 注意事项：
+> - 需要 Python 3.10+，安装时务必勾选 **Add Python to PATH**
+> - 若 PowerShell 提示执行策略限制，先运行：`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+> - `start.bat` 与 `start.ps1` 均会自动创建 `.venv` 并安装依赖，无需手动操作
 
 NAS Docker 启动 Client：
 

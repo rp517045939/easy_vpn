@@ -41,13 +41,31 @@ def configure_logging(log_dir: Path) -> None:
 
     state_handler = StateLogHandler()
 
+    # Windows 文件锁会导致日志轮转时 PermissionError；
+    # delay=True 让 handler 懒打开文件，降低冲突窗口。
     file_handler = RotatingFileHandler(
         log_file,
         maxBytes=LOG_ROTATE_MAX_BYTES,
         backupCount=LOG_ROTATE_BACKUP_COUNT,
         encoding="utf-8",
+        delay=True,
     )
     file_handler.setFormatter(formatter)
+
+    # Windows 上，RotatingFileHandler.doRollover() 调用 os.rename()
+    # 时可能遭遇短暂文件锁，用重试包裹 emit 消除 PermissionError。
+    if sys.platform == "win32":
+        _original_emit = file_handler.emit
+
+        def _safe_emit(record: logging.LogRecord) -> None:
+            for _ in range(5):
+                try:
+                    _original_emit(record)
+                    return
+                except PermissionError:
+                    time.sleep(0.05)
+
+        file_handler.emit = _safe_emit  # type: ignore[method-assign]
 
     logging.basicConfig(
         level=logging.INFO,
@@ -261,6 +279,11 @@ async def _handle_http(send_http_response, channel_id: str, request_data: dict, 
 
 
 if __name__ == "__main__":
+    # aiohttp 在 Windows 上要求 SelectorEventLoop；Python 3.8+ 默认是
+    # ProactorEventLoop，需在 asyncio.run() 之前切换。
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     parser = argparse.ArgumentParser(description="easy_vpn client")
     parser.add_argument("--config",   default="config.yml",  help="config file path")
     parser.add_argument("--ui-host",  default="127.0.0.1",   help="Web UI listen host (default: 127.0.0.1)")
