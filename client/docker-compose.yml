@@ -7,5 +7,9 @@ services:
     network_mode: host          # 使用宿主机网络，方便访问 NAS 本地服务
     volumes:
       - ./config.yml:/config/config.yml   # 把 config.yml 和 docker-compose.yml 放同一目录即可
+      - ./logs:/config/logs               # 客户端滚动日志持久化
+    environment:
+      # 可在同目录 .env 中设置 EASY_VPN_UI_PASSWORD=你的固定密码；留空则每次启动随机生成
+      EASY_VPN_UI_PASSWORD: ${EASY_VPN_UI_PASSWORD:-}
     command: ["--config", "/config/config.yml", "--ui-host", "0.0.0.0"]
     # Web UI 在 host 模式下直接通过宿主机 IP:7070 访问，无需 ports 映射

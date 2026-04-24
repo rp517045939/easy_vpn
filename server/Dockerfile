@@ -2,7 +2,7 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /dashboard
 COPY dashboard/package.json dashboard/package-lock.json* ./
-RUN npm install
+RUN npm ci
 COPY dashboard/ .
 RUN npm run build
 # Output: /dashboard/../server/static → /server/static

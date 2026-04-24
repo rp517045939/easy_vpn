@@ -1,3 +1,3 @@
-websockets
-pyyaml
-aiohttp
+websockets==16.0
+PyYAML==6.0.3
+aiohttp==3.13.5

@@ -66,7 +66,7 @@ nano .env
 
 ```bash
 cd dashboard
-npm install
+npm ci
 npm run build        # 产物输出到 server/static/
 ```
 
@@ -140,9 +140,10 @@ server {
 
 ### 前置条件
 
-- Python 3.9+
+- NAS Docker 方案：Docker / Docker Compose
+- 直接运行 Python：Python 3.9+
 
-### 1. 安装依赖
+### 1. 安装 Python 依赖（直接运行时）
 
 ```bash
 cd client
@@ -167,7 +168,48 @@ client:
   id: nas                                # 唯一标识，建议用设备名，如 nas / mac / win
 ```
 
-### 3. 启动
+### 3. NAS Docker 启动（推荐）
+
+NAS 上推荐用 `client/docker-compose.yml` 运行 Client。该方案固定使用 host 网络，规则里的 `local_host: 127.0.0.1` 会指向 NAS 宿主机本身，适合转发 NAS 管理页、SSH、相册、文件服务等本机端口。
+
+```bash
+cd client
+cp config.example.yml config.yml
+nano config.yml
+```
+
+可选：创建同目录 `.env`，固定 Client 本地 Web UI 密码。留空时每次容器启动会随机生成密码，并写入容器日志。
+
+```bash
+cat > .env <<'EOF'
+EASY_VPN_UI_PASSWORD=change-this-password
+EOF
+```
+
+启动：
+
+```bash
+docker compose up -d --build
+docker logs -f easy_vpn_client
+```
+
+Client Web UI 会监听 NAS 的 `7070` 端口，可在局域网访问：
+
+```text
+http://NAS_IP:7070
+```
+
+更新：
+
+```bash
+git pull
+cd client
+docker compose up -d --build
+```
+
+> 这个 compose 文件是 NAS/Linux 专用方案。不要把 `network_mode: host` 改成普通 bridge 网络，否则 `127.0.0.1` 会变成容器自身，无法直接访问 NAS 宿主机上的本地服务。
+
+### 4. 直接运行 Python
 
 ```bash
 python main.py --config config.yml

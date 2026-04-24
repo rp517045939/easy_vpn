@@ -55,7 +55,7 @@ info "检查 Python 依赖..."
 # ---------- 检查 node_modules ----------
 if [ ! -d "$PROJECT_DIR/dashboard/node_modules" ]; then
     info "安装前端依赖..."
-    (cd "$PROJECT_DIR/dashboard" && npm install --silent) \
+    (cd "$PROJECT_DIR/dashboard" && npm ci --silent) \
         || abort "前端依赖安装失败"
 fi
 
