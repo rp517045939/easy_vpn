@@ -91,12 +91,18 @@ $settings.DisallowStartIfOnBatteries = $false
 # 删除旧任务（如果存在）再重新注册
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
+# 以当前用户身份、交互式登录运行（无需管理员权限）
+$principal = New-ScheduledTaskPrincipal `
+    -UserId    "$env:USERDOMAIN\$env:USERNAME" `
+    -LogonType Interactive `
+    -RunLevel  Limited
+
 Register-ScheduledTask `
     -TaskName   $TaskName `
     -Action     $action `
     -Trigger    $trigger `
     -Settings   $settings `
-    -RunLevel   Limited `
+    -Principal  $principal `
     -Description "easy_vpn 内网穿透客户端，开机自启" | Out-Null
 
 if ($?) {
