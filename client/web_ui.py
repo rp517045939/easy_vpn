@@ -2,6 +2,7 @@
 Client 本地 Web 管理界面，默认监听 http://localhost:7070
 """
 import asyncio
+import base64
 import json
 import logging
 from pathlib import Path
@@ -12,6 +13,31 @@ from aiohttp import web
 from state import client_state
 
 logger = logging.getLogger(__name__)
+
+
+def _unauthorized() -> web.Response:
+    response = web.Response(text="Authentication required", status=401)
+    response.headers["WWW-Authenticate"] = 'Basic realm="easy_vpn client"'
+    return response
+
+
+@web.middleware
+async def basic_auth_middleware(request, handler):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return _unauthorized()
+
+    try:
+        encoded = auth.split(" ", 1)[1]
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        username, password = decoded.split(":", 1)
+    except Exception:
+        return _unauthorized()
+
+    if username != client_state.ui_username or password != client_state.ui_password:
+        return _unauthorized()
+
+    return await handler(request)
 
 # ------------------------------------------------------------------ HTML
 
@@ -422,7 +448,7 @@ async def handle_put_config(request):
 # ------------------------------------------------------------------ 启动
 
 def create_app() -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[basic_auth_middleware])
     app.router.add_get("/",                  handle_index)
     app.router.add_get("/api/status",        handle_status)
     app.router.add_get("/api/logs",          handle_logs)
@@ -438,4 +464,11 @@ async def start_web_ui(host: str = "127.0.0.1", port: int = 7070):
     await runner.setup()
     site = web.TCPSite(runner, host, port)
     await site.start()
-    logger.info(f"Web UI running at http://{host}:{port}")
+    logger.info("Web UI running at http://%s:%s", host, port)
+    logger.info(
+        "Local admin UI credentials: url=http://%s:%s username=%s password=%s",
+        host,
+        port,
+        client_state.ui_username,
+        client_state.ui_password,
+    )
