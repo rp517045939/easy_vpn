@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 :: easy_vpn Client 一键启动脚本（Windows）
 :: 用法：双击运行，或在命令提示符中执行 start.bat [--no-ui]
 

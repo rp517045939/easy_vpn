@@ -1,4 +1,4 @@
-# easy_vpn Client 一键启动脚本（Windows PowerShell）
+﻿# easy_vpn Client 一键启动脚本（Windows PowerShell）
 # 用法：右键 → "用 PowerShell 运行"，或执行 .\start.ps1 [--no-ui]
 # 若提示执行策略限制，先运行：Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
