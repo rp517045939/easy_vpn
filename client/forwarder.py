@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 # channel_id → asyncio.StreamWriter（本地 TCP 连接）
 _tcp_writers: dict[str, asyncio.StreamWriter] = {}
+_udp_transports: dict[str, asyncio.DatagramTransport] = {}
 
 
 # ------------------------------------------------------------------ HTTP
@@ -120,3 +121,58 @@ async def close_tcp(channel_id: str) -> None:
         except Exception:
             pass
     logger.info(f"TCP channel {channel_id[:8]} closed")
+
+
+# ------------------------------------------------------------------ UDP
+
+class _UdpForwardProtocol(asyncio.DatagramProtocol):
+    def __init__(self, channel_id: str, send_data_fn: Callable):
+        self.channel_id = channel_id
+        self.send_data_fn = send_data_fn
+
+    def datagram_received(self, data: bytes, addr):
+        client_state.record_traffic(sent=len(data))
+        asyncio.create_task(self.send_data_fn(self.channel_id, data))
+
+    def error_received(self, exc):
+        logger.debug(f"UDP channel {self.channel_id[:8]} error: {exc}")
+
+
+async def open_udp(local_host: str, local_port: int,
+                   channel_id: str,
+                   send_data_fn: Callable,
+                   send_close_fn: Callable) -> None:
+    """
+    建立到本地 UDP 服务的转发端点。
+    UDP 无连接，服务端 idle timeout 或连接断开时会调用 close_udp() 清理。
+    """
+    if channel_id in _udp_transports:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+        transport, _ = await loop.create_datagram_endpoint(
+            lambda: _UdpForwardProtocol(channel_id, send_data_fn),
+            remote_addr=(local_host, local_port),
+        )
+        _udp_transports[channel_id] = transport
+        logger.info(f"UDP channel {channel_id[:8]} -> {local_host}:{local_port}")
+    except Exception as e:
+        logger.error(f"UDP open {channel_id[:8]} [{local_host}:{local_port}]: {e}")
+        await send_close_fn(channel_id)
+
+
+async def write_udp(channel_id: str, data: bytes) -> None:
+    transport = _udp_transports.get(channel_id)
+    if transport:
+        try:
+            transport.sendto(data)
+            client_state.record_traffic(recv=len(data))
+        except Exception as e:
+            logger.error(f"UDP write {channel_id[:8]}: {e}")
+
+
+async def close_udp(channel_id: str) -> None:
+    transport = _udp_transports.pop(channel_id, None)
+    if transport:
+        transport.close()
+    logger.info(f"UDP channel {channel_id[:8]} closed")

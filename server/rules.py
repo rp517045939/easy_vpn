@@ -103,6 +103,9 @@ class RulesManager:
             for f in ("client_id", "server_port", "local_host", "local_port"):
                 if not rule.get(f):
                     raise ValueError(f"TCP rule missing field: {f}")
+            app_protocol = rule.get("app_protocol")
+            if app_protocol and app_protocol not in ("tcp", "rdp"):
+                raise ValueError(f"Invalid app_protocol: {app_protocol}")
             port = rule["server_port"]
             if not (settings.tcp_port_min <= port <= settings.tcp_port_max):
                 raise ValueError(f"server_port must be in {settings.tcp_port_min}-{settings.tcp_port_max}")

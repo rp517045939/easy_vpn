@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目简介
 
-easy_vpn：基于 WebSocket 的内网穿透工具。云服务器运行 Server，内网设备运行 Client，通过 WebSocket 长连接多路复用实现 HTTP 子域名代理和 TCP 端口转发。管理面板（Vue 3）负责在线设备展示和隧道规则管理。
+easy_vpn：基于 WebSocket 的内网穿透工具。云服务器运行 Server，内网设备运行 Client，通过 WebSocket 长连接多路复用实现 HTTP 子域名代理、TCP 端口转发和 RDP UDP 加速。管理面板（Vue 3）负责在线设备展示和隧道规则管理。
 
 ## 本地开发
 
@@ -94,14 +94,16 @@ NAS 方案固定使用 `network_mode: host`，这样规则里的 `local_host: 12
 - `register` / `rules_push` / `heartbeat` / `heartbeat_ack`：控制消息
 - `http_request` / `http_response`：HTTP 隧道，每个请求一个 channel_id，Future 等待响应
 - `tcp_open` / `tcp_data` / `tcp_close`：TCP 隧道，每个连接一个 channel_id，Queue 传输数据流
+- `udp_open` / `udp_data` / `udp_close`：UDP 隧道，每个外部 UDP peer 一个 channel_id，用于 RDP UDP 加速
 
 ### Server 关键模块
 
 | 文件 | 职责 |
 |------|------|
-| `main.py` | FastAPI 入口；启动 TCP 监听器和心跳任务；WebSocket 握手和注册；`catch_all` 路由区分管理面板域名和 HTTP 隧道域名 |
-| `tunnel_manager.py` | `TunnelManager` 单例；管理所有 Client 连接；HTTP channel（Future）和 TCP channel（Queue）的生命周期；心跳检测 |
+| `main.py` | FastAPI 入口；启动 TCP/UDP 监听器和心跳任务；WebSocket 握手和注册；`catch_all` 路由区分管理面板域名和 HTTP 隧道域名 |
+| `tunnel_manager.py` | `TunnelManager` 单例；管理所有 Client 连接；HTTP channel（Future）、TCP channel（Queue）和 UDP channel 的生命周期；心跳检测 |
 | `tcp_listener.py` | 动态监听 2200-2299 端口段；外部 TCP 连接到达后通过 WebSocket 桥接到对应 Client |
+| `udp_listener.py` | 动态监听 RDP 规则的 UDP 端口；按外部 peer 维护 UDP session 并 idle cleanup |
 | `proxy.py` | 收到 HTTP 请求，按 `Host` 头找到对应 Client，调用 `tunnel_manager.forward_http()` |
 | `rules.py` | JSON 文件持久化规则；规则变更后调用 `tunnel_manager.push_rules()` 实时推送给在线 Client |
 | `api.py` | 管理面板 REST API：登录、规则 CRUD、在线设备列表、可用端口查询 |
@@ -113,7 +115,7 @@ NAS 方案固定使用 `network_mode: host`，这样规则里的 `local_host: 12
 | 文件 | 职责 |
 |------|------|
 | `main.py` | 连接 Server，发送 register，接收规则和消息，分发给 forwarder；指数退避重连（最长 60s）；支持配置热重载 |
-| `forwarder.py` | `forward_http()`：向本地服务发 HTTP 请求；`open_tcp()`：与本地端口建立 TCP 连接并双向转发 |
+| `forwarder.py` | `forward_http()`：向本地服务发 HTTP 请求；`open_tcp()`：与本地端口建立 TCP 连接并双向转发；`open_udp()`：向本地 UDP 服务转发 datagram |
 | `state.py` | `ClientState` 单例，保存连接状态、规则列表、日志缓冲，供 Web UI 读取 |
 | `web_ui.py` | 本地 Web 管理界面（默认 localhost:7070），展示连接状态和规则 |
 
@@ -144,5 +146,5 @@ sudo bash server_deploy.sh --skip-ssl  # 测试环境
 
 - **生产服务器（43.163.90.149:22022）禁止随便操作**；测试服务器（119.91.235.65:22022）可自由使用
 - **GitHub 公开仓库**：禁止推送 IP、密钥、.env、密码、真实配置等敏感信息
-- TCP 端口范围：2200–2299，由面板统一分配，不要硬编码特定端口
+- TCP/UDP 端口范围：2200–2299，由面板统一分配，不要硬编码特定端口
 - Server 启动时会自动从 `rules.json` 恢复并监听已有 TCP 规则

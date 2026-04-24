@@ -40,6 +40,8 @@ export const rulesApi = {
   //         local_host:'127.0.0.1', local_port:5000, label:'NAS 管理页面' }
   // TCP:  { type:'tcp',  client_id:'mac', server_port:2222,
   //         local_host:'127.0.0.1', local_port:22,   label:'Mac SSH' }
+  // RDP:  { type:'tcp',  app_protocol:'rdp', udp_enabled:true, client_id:'win',
+  //         server_port:2233, local_host:'127.0.0.1', local_port:3389, label:'Windows RDP' }
   update: (ruleId, rule)  => http.put(`/rules/${ruleId}`, rule),
   toggle: (ruleId)        => http.patch(`/rules/${ruleId}/toggle`),
   delete: (ruleId)        => http.delete(`/rules/${ruleId}`),

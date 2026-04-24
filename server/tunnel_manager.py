@@ -14,6 +14,8 @@ class TunnelManager:
         self._http_channels: dict[str, asyncio.Future] = {}   # channel_id → Future
         self._tcp_queues: dict[str, asyncio.Queue] = {}       # channel_id → Queue
         self._tcp_open_waiters: dict[str, asyncio.Future] = {} # channel_id → Future
+        self._udp_channels: set[str] = set()                  # channel_id 集合
+        self._udp_listener = None
         self._channel_owner: dict[str, str] = {}              # channel_id → client_id
         self._lock = asyncio.Lock()
         # 流量统计：内存增量，定期 flush 到 SQLite
@@ -66,6 +68,10 @@ class TunnelManager:
             queue = self._tcp_queues.pop(cid, None)
             if queue:
                 await queue.put(None)
+            if cid in self._udp_channels:
+                self._udp_channels.discard(cid)
+                if self._udp_listener:
+                    await self._udp_listener.close_channel(cid, notify_client=False)
             self._channel_owner.pop(cid, None)
 
         asyncio.create_task(self._flush_traffic())
@@ -76,6 +82,9 @@ class TunnelManager:
 
     def count_online(self) -> int:
         return len(self._clients)
+
+    def set_udp_listener(self, listener) -> None:
+        self._udp_listener = listener
 
     async def get_online_clients(self) -> list:
         from rules import rules_manager
@@ -206,6 +215,18 @@ class TunnelManager:
             if queue:
                 await queue.put(None)  # sentinel
 
+        elif msg_type == MsgType.UDP_DATA:
+            if msg.get("data") and self._udp_listener:
+                raw = decode_data(msg["data"])
+                self.record_traffic(self._channel_owner.get(channel_id, ""), bytes_out=len(raw))
+                await self._udp_listener.send_to_peer(channel_id, raw)
+
+        elif msg_type == MsgType.UDP_CLOSE:
+            self._udp_channels.discard(channel_id)
+            self._channel_owner.pop(channel_id, None)
+            if self._udp_listener:
+                await self._udp_listener.close_channel(channel_id, notify_client=False)
+
     # ------------------------------------------------------------------ HTTP 隧道
 
     async def forward_http(self, client_id: str, request_data: dict) -> dict:
@@ -281,6 +302,31 @@ class TunnelManager:
         if queue:
             await queue.put(None)  # 唤醒 pipe_out，使其正常退出并关闭 writer
         await self._send(client_id, encode(MsgType.TCP_CLOSE, channel_id=channel_id))
+
+    # ------------------------------------------------------------------ UDP 隧道
+
+    async def open_udp_channel(self, client_id: str, channel_id: str,
+                               local_host: str, local_port: int) -> None:
+        client = self._clients.get(client_id)
+        if not client:
+            raise ConnectionError(f"Client {client_id} is not online")
+
+        self._udp_channels.add(channel_id)
+        self._channel_owner[channel_id] = client_id
+        self.record_traffic(client_id, tcp_conn=1)
+        await self._send(client_id, encode(
+            MsgType.UDP_OPEN, channel_id=channel_id,
+            payload={"local_host": local_host, "local_port": local_port}
+        ))
+
+    async def send_udp_data(self, client_id: str, channel_id: str, data: bytes) -> None:
+        self.record_traffic(client_id, bytes_in=len(data))
+        await self._send(client_id, encode(MsgType.UDP_DATA, channel_id=channel_id, data=data))
+
+    async def close_udp_channel(self, client_id: str, channel_id: str) -> None:
+        self._udp_channels.discard(channel_id)
+        self._channel_owner.pop(channel_id, None)
+        await self._send(client_id, encode(MsgType.UDP_CLOSE, channel_id=channel_id))
 
     # ------------------------------------------------------------------ 规则推送
 

@@ -21,6 +21,6 @@ COPY server/ .
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /server/static ./static
 
-EXPOSE 8080
+EXPOSE 8080 2200-2299/tcp 2200-2299/udp
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

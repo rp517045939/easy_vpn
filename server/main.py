@@ -16,6 +16,7 @@ from protocol import MsgType, decode, encode
 from rules import rules_manager
 from tcp_listener import tcp_listener
 from tunnel_manager import tunnel_manager
+from udp_listener import udp_listener
 
 logger = logging.getLogger(__name__)
 
@@ -122,12 +123,19 @@ async def lifespan(app: FastAPI):
     from traffic_db import init_db
     await init_db()
     tcp_listener.set_tunnel_manager(tunnel_manager)
+    udp_listener.set_tunnel_manager(tunnel_manager)
+    tunnel_manager.set_udp_listener(udp_listener)
     for rule in rules_manager.get_all():
         if rule["type"] == "tcp" and rule.get("enabled", True):
             await tcp_listener.start(
                 rule["server_port"], rule["client_id"],
                 rule["local_host"], rule["local_port"],
             )
+            if rule.get("app_protocol") == "rdp" and rule.get("udp_enabled", True):
+                await udp_listener.start(
+                    rule["server_port"], rule["client_id"],
+                    rule["local_host"], rule["local_port"],
+                )
     heartbeat_task      = asyncio.create_task(tunnel_manager.heartbeat_loop())
     traffic_flush_task  = asyncio.create_task(tunnel_manager.traffic_flush_loop())
     log_cleanup_task    = asyncio.create_task(log_cleanup_loop(_log_dir))
@@ -139,6 +147,7 @@ async def lifespan(app: FastAPI):
     log_cleanup_task.cancel()
     await tunnel_manager._flush_traffic()
     await tcp_listener.stop_all()
+    await udp_listener.stop_all()
     logger.info("easy_vpn server stopped")
 
 

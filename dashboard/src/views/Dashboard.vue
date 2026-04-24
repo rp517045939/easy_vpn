@@ -185,6 +185,9 @@
                   <span v-if="rule.type === 'http'" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
                     HTTP
                   </span>
+                  <span v-else-if="isRdpRule(rule)" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-sky-100 text-sky-700 border border-sky-200">
+                    RDP
+                  </span>
                   <span v-else class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
                     TCP
                   </span>
@@ -251,9 +254,10 @@
           <div class="p-6 space-y-5">
             <div>
               <label class="label">类型</label>
-              <select v-model="modal.rule.type" :disabled="!!modal.rule.id" class="input-field">
+              <select v-model="modal.rule.type" :disabled="!!modal.rule.id" class="input-field" @change="applyRuleTypeDefaults">
                 <option value="http">HTTP（Web 服务）</option>
                 <option value="tcp">TCP（SSH 等）</option>
+                <option value="rdp">RDP（远程桌面）</option>
               </select>
             </div>
 
@@ -315,6 +319,9 @@
                 <select v-model.number="modal.rule.server_port" class="input-field font-mono text-sm">
                   <option v-for="p in availablePorts" :key="p" :value="p">{{ p }}</option>
                 </select>
+                <p v-if="modal.rule.type === 'rdp'" class="mt-1 text-xs text-slate-400">
+                  RDP 连接地址：<code class="bg-slate-100 px-1 rounded">{{ tcpHost }}:{{ modal.rule.server_port || '端口' }}</code>
+                </p>
               </div>
             </template>
 
@@ -325,7 +332,7 @@
               </div>
               <div>
                 <label class="label">本地端口</label>
-                <input v-model.number="modal.rule.local_port" type="number" placeholder="22" class="input-field font-mono text-sm" />
+                <input v-model.number="modal.rule.local_port" type="number" :placeholder="modal.rule.type === 'rdp' ? '3389' : '22'" class="input-field font-mono text-sm" />
               </div>
             </div>
 
@@ -522,6 +529,8 @@ const vClickOutside = {
 
 const onlineCount = computed(() => clients.value.length)
 const isOnline    = (clientId) => clients.value.some(c => c.client_id === clientId)
+const isRdpRule   = (rule) => rule.type === 'tcp' && rule.app_protocol === 'rdp'
+const tcpHost     = computed(() => window.location.hostname || httpDomain.value || 'vpn.example.com')
 
 // 合并在线设备 + 历史流量，全量展示
 const allDevices = computed(() => {
@@ -567,7 +576,21 @@ const modal = ref({
 
 function defaultRule() {
   return { type: 'http', client_id: '', subdomain: '', server_port: null,
-           local_host: '127.0.0.1', local_port: '', label: '' }
+           local_host: '127.0.0.1', local_port: '', label: '', app_protocol: '', udp_enabled: false }
+}
+
+function applyRuleTypeDefaults() {
+  const rule = modal.value.rule
+  rule.local_host ||= '127.0.0.1'
+  if (rule.type === 'rdp') {
+    rule.local_port = 3389
+    rule.app_protocol = 'rdp'
+    rule.udp_enabled = true
+    if (!rule.label) rule.label = 'RDP 远程桌面'
+  } else if (rule.type === 'tcp') {
+    rule.app_protocol = ''
+    rule.udp_enabled = false
+  }
 }
 
 function openModal(rule = null) {
@@ -575,6 +598,10 @@ function openModal(rule = null) {
   modal.value.saving = false
   if (rule) {
     const r = { ...rule }
+    if (isRdpRule(r)) {
+      r.type = 'rdp'
+      r.udp_enabled = r.udp_enabled !== false
+    }
     if (r.type === 'http' && httpDomain.value && r.subdomain) {
       const suffix = '.' + httpDomain.value
       if (r.subdomain.endsWith(suffix)) {
@@ -586,11 +613,16 @@ function openModal(rule = null) {
     modal.value.rule = defaultRule()
   }
   modal.value.visible = true
-  if (!rule) loadAvailablePorts()
+  loadAvailablePorts(modal.value.rule.server_port)
 }
 
-async function loadAvailablePorts() {
-  try { availablePorts.value = await portsApi.available() } catch {}
+async function loadAvailablePorts(currentPort = null) {
+  try {
+    const ports = await portsApi.available()
+    availablePorts.value = currentPort && !ports.includes(currentPort)
+      ? [currentPort, ...ports]
+      : ports
+  } catch {}
 }
 
 async function saveRule() {
@@ -600,6 +632,15 @@ async function saveRule() {
     const rule = { ...modal.value.rule }
     if (rule.type === 'http' && httpDomain.value && rule.subdomain) {
       rule.subdomain = rule.subdomain.trim() + '.' + httpDomain.value
+    }
+    if (rule.type === 'rdp') {
+      rule.type = 'tcp'
+      rule.app_protocol = 'rdp'
+      rule.udp_enabled = true
+      rule.local_port = rule.local_port || 3389
+    } else if (rule.type === 'tcp') {
+      delete rule.app_protocol
+      delete rule.udp_enabled
     }
     if (rule.id) {
       const { id, ...updates } = rule

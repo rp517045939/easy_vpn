@@ -19,7 +19,7 @@ import websockets
 import websockets.exceptions
 
 from protocol import MsgType, encode, decode, decode_data
-from forwarder import forward_http, open_tcp, write_tcp, close_tcp
+from forwarder import forward_http, open_tcp, write_tcp, close_tcp, open_udp, write_udp, close_udp
 from state import client_state, StateLogHandler
 
 logger = logging.getLogger("easy_vpn_client")
@@ -178,6 +178,12 @@ async def run_once(config: dict):
         async def send_tcp_close(channel_id: str):
             await ws_send(encode(MsgType.TCP_CLOSE, channel_id=channel_id))
 
+        async def send_udp_data(channel_id: str, data: bytes):
+            await ws_send(encode(MsgType.UDP_DATA, channel_id=channel_id, data=data))
+
+        async def send_udp_close(channel_id: str):
+            await ws_send(encode(MsgType.UDP_CLOSE, channel_id=channel_id))
+
         async def send_http_response(channel_id: str, response: dict):
             await ws_send(encode(MsgType.HTTP_RESPONSE, channel_id=channel_id, payload=response))
 
@@ -217,6 +223,20 @@ async def run_once(config: dict):
 
             elif msg_type == MsgType.TCP_CLOSE:
                 await close_tcp(channel_id)
+
+            elif msg_type == MsgType.UDP_OPEN:
+                payload = msg["payload"]
+                await open_udp(
+                    payload["local_host"], payload["local_port"],
+                    channel_id, send_udp_data, send_udp_close
+                )
+
+            elif msg_type == MsgType.UDP_DATA:
+                data = decode_data(msg["data"])
+                await write_udp(channel_id, data)
+
+            elif msg_type == MsgType.UDP_CLOSE:
+                await close_udp(channel_id)
 
 
 async def run(config_path: str):

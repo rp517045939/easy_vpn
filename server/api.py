@@ -10,6 +10,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
 
+def _udp_enabled(rule: dict) -> bool:
+    return rule.get("type") == "tcp" and rule.get("app_protocol") == "rdp" and rule.get("udp_enabled", True)
+
+
+async def _start_tcp_udp(rule: dict) -> None:
+    from tcp_listener import tcp_listener
+    await tcp_listener.start(
+        rule["server_port"], rule["client_id"],
+        rule["local_host"], rule["local_port"]
+    )
+    if _udp_enabled(rule):
+        from udp_listener import udp_listener
+        await udp_listener.start(
+            rule["server_port"], rule["client_id"],
+            rule["local_host"], rule["local_port"]
+        )
+
+
+async def _stop_tcp_udp(rule: dict) -> None:
+    from tcp_listener import tcp_listener
+    await tcp_listener.stop(rule["server_port"])
+    if _udp_enabled(rule):
+        from udp_listener import udp_listener
+        await udp_listener.stop(rule["server_port"])
+
+
 # ------------------------------------------------------------------ 认证
 
 class LoginRequest(BaseModel):
@@ -62,11 +88,7 @@ async def add_rule(rule: dict, user=Depends(get_current_user)):
 
     # TCP 规则：新规则默认启用，立即启动端口监听
     if rule["type"] == "tcp":
-        from tcp_listener import tcp_listener
-        await tcp_listener.start(
-            new_rule["server_port"], new_rule["client_id"],
-            new_rule["local_host"], new_rule["local_port"]
-        )
+        await _start_tcp_udp(new_rule)
 
     # 推送最新规则给在线 Client
     await tunnel_manager.push_rules(rule["client_id"], rules_manager.get_by_client(rule["client_id"]))
@@ -81,14 +103,11 @@ async def update_rule(rule_id: str, updates: dict, user=Depends(get_current_user
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # TCP 规则：只要有任意字段变更，一律先 stop 再 start（避免目标不更新）
-    if updated["type"] == "tcp" and old_rule:
-        from tcp_listener import tcp_listener
-        await tcp_listener.stop(old_rule["server_port"])
-        await tcp_listener.start(
-            updated["server_port"], updated["client_id"],
-            updated["local_host"], updated["local_port"]
-        )
+    # TCP/RDP 规则：只要有任意字段变更，一律先 stop 再 start（避免目标不更新）
+    if old_rule and old_rule["type"] == "tcp":
+        await _stop_tcp_udp(old_rule)
+    if updated["type"] == "tcp" and updated.get("enabled", True):
+        await _start_tcp_udp(updated)
 
     # 推送规则：如果 client_id 发生变更，旧 client 也要收到通知（规则已从它那边移走）
     old_client_id = old_rule["client_id"] if old_rule else None
@@ -109,14 +128,10 @@ async def toggle_rule(rule_id: str, user=Depends(get_current_user)):
 
     # TCP 规则：根据新状态启动或停止监听
     if rule["type"] == "tcp":
-        from tcp_listener import tcp_listener
         if rule["enabled"]:
-            await tcp_listener.start(
-                rule["server_port"], rule["client_id"],
-                rule["local_host"], rule["local_port"]
-            )
+            await _start_tcp_udp(rule)
         else:
-            await tcp_listener.stop(rule["server_port"])
+            await _stop_tcp_udp(rule)
 
     # 推送给 client（get_by_client 只推 enabled 的规则）
     await tunnel_manager.push_rules(rule["client_id"], rules_manager.get_by_client(rule["client_id"]))
@@ -132,8 +147,7 @@ async def delete_rule(rule_id: str, user=Depends(get_current_user)):
 
     # TCP 规则：停止端口监听
     if deleted["type"] == "tcp":
-        from tcp_listener import tcp_listener
-        await tcp_listener.stop(deleted["server_port"])
+        await _stop_tcp_udp(deleted)
 
     await tunnel_manager.push_rules(deleted["client_id"], rules_manager.get_by_client(deleted["client_id"]))
     return {"ok": True}

@@ -8,7 +8,8 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"      # HTTP：只暴露给宿主机 Nginx，不对外直接开放
-      - "0.0.0.0:2200-2299:2200-2299"  # TCP 隧道端口段：SSH 等直连，对外开放
+      - "0.0.0.0:2200-2299:2200-2299/tcp"  # TCP 隧道端口段：SSH/RDP 等直连，对外开放
+      - "0.0.0.0:2200-2299:2200-2299/udp"  # UDP 隧道端口段：RDP 加速通道
     env_file:
       - .env
     volumes:

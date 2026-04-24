@@ -1,6 +1,6 @@
 """
 WebSocket 通信协议。
-一条 WebSocket 连接通过 channel_id 多路复用，承载 control / http / tcp 三类消息。
+一条 WebSocket 连接通过 channel_id 多路复用，承载 control / http / tcp / udp 四类消息。
 """
 import json
 import base64
@@ -19,6 +19,9 @@ class MsgType(str, Enum):
     TCP_OPENED    = "tcp_opened"
     TCP_DATA      = "tcp_data"
     TCP_CLOSE     = "tcp_close"
+    UDP_OPEN      = "udp_open"
+    UDP_DATA      = "udp_data"
+    UDP_CLOSE     = "udp_close"
 
 
 def encode(msg_type: str, channel_id: str = None,

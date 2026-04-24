@@ -1,6 +1,6 @@
 # easy_vpn
 
-基于 WebSocket 的内网穿透工具，支持 HTTP 子域名代理和 TCP 端口转发。适合个人/家庭设备（NAS、Mac、Windows）通过云服务器的公网域名对外暴露内网服务。
+基于 WebSocket 的内网穿透工具，支持 HTTP 子域名代理、TCP 端口转发和带 UDP 加速的 RDP 远程桌面。适合个人/家庭设备（NAS、Mac、Windows、Ubuntu）通过云服务器的公网域名对外暴露内网服务。
 
 ## 架构
 
@@ -11,8 +11,9 @@
   │    ├── vpn.example.com       → easy_vpn 管理面板
   │    └── nas.example.com       → HTTP 隧道 → NAS 内网服务
   │
-  └── TCP 2200-2299（直连）
-       └── server:2222           → TCP 隧道 → NAS SSH:22
+  └── TCP/UDP 2200-2299（直连）
+       ├── server:2222           → TCP 隧道 → NAS SSH:22
+       └── server:2233           → RDP 隧道 → Windows/Ubuntu:3389
 
 云服务器（easy_vpn Server）
   └── WebSocket 长连接
@@ -259,12 +260,13 @@ sudo journalctl -u easy_vpn_client -f
 
 | 字段 | 说明 |
 |------|------|
-| 类型 | `http`（子域名代理）或 `tcp`（端口转发） |
+| 类型 | `http`（子域名代理）、`tcp`（端口转发）或 `rdp`（远程桌面） |
 | Client | 目标设备，从在线列表中选择 |
 | 本地地址 | Client 侧的内网 IP，通常填 `127.0.0.1` |
 | 本地端口 | Client 侧要暴露的服务端口 |
 | 子域名（HTTP） | 如 `nas`，对应 `nas.example.com` |
 | 服务端端口（TCP）| 如 `2222`，外部通过 `server:2222` 访问 |
+| 服务端端口（RDP）| 如 `2233`，外部 RDP 客户端连接 `vpn.example.com:2233` |
 
 规则保存后立即下发给对应 Client，无需重启任何服务。
 
@@ -296,6 +298,32 @@ sudo journalctl -u easy_vpn_client -f
 ssh -p 2222 user@vpn.example.com
 ```
 
+**RDP 远程桌面到 Windows / Ubuntu：**
+
+| 字段 | 值 |
+|------|-----|
+| 类型 | rdp |
+| Client | windows-pc 或 ubuntu |
+| 本地地址 | 127.0.0.1 |
+| 本地端口 | 3389 |
+| 服务端端口 | 2233 |
+
+Windows 目标机需在“系统 → 远程桌面”中启用远程桌面，并允许防火墙放行远程桌面。Ubuntu 目标机可安装并启动 `xrdp`：
+
+```bash
+sudo apt update
+sudo apt install -y xrdp
+sudo systemctl enable --now xrdp
+```
+
+外部使用 Windows 远程桌面、Microsoft Remote Desktop、Remmina 等原生 RDP 客户端连接：
+
+```text
+vpn.example.com:2233
+```
+
+RDP 规则会同时转发 TCP 和 UDP 到目标机器的 `3389`。TCP 负责兼容性，UDP 用于改善画面和输入体验；如果网络或客户端不支持 UDP，RDP 通常会自动退回 TCP。
+
 ---
 
 ## 本地开发
@@ -324,4 +352,5 @@ Client 本地测试时，将 `config.yml` 中的 `url` 改为 `ws://localhost:80
 | 端口 | 用途 |
 |------|------|
 | 8080 | Server HTTP（仅宿主机 Nginx 访问，不对外开放） |
-| 2200–2299 | TCP 隧道端口段，对外开放 |
+| 2200–2299/tcp | TCP 隧道端口段，对外开放 |
+| 2200–2299/udp | RDP UDP 加速端口段，对外开放 |

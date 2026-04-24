@@ -80,6 +80,7 @@ _HTML = r"""<!DOCTYPE html>
            border-radius:6px; font-size:11px; font-weight:700; }
   .badge-http { background:#ede9fe; color:#6d28d9; }
   .badge-tcp  { background:#d1fae5; color:#065f46; }
+  .badge-rdp  { background:#e0f2fe; color:#0369a1; }
 
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th { text-align:left; padding:10px 12px; font-size:11px; font-weight:700;
@@ -298,7 +299,7 @@ function renderRules(rules) {
       <th>类型</th><th>外部地址</th><th>本地地址</th><th>备注</th>
     </tr></thead>
     <tbody>${rules.map(r => `<tr>
-      <td><span class="badge badge-${r.type}">${r.type.toUpperCase()}</span></td>
+      <td><span class="badge badge-${r.app_protocol === 'rdp' ? 'rdp' : r.type}">${r.app_protocol === 'rdp' ? 'RDP' : r.type.toUpperCase()}</span></td>
       <td class="mono">${r.type==='http' ? r.subdomain : ':'+r.server_port}</td>
       <td class="mono">${r.local_host}:${r.local_port}</td>
       <td>${r.label || '-'}</td>
