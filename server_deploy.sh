@@ -197,6 +197,41 @@ EOF
     fi
 }
 
+write_ssl_nginx_config() {
+    # 确保证书已存在后，显式写入 80 -> 443 和 443 反代配置。
+    # 避免“证书文件存在但 Nginx 仍命中默认自签站点”的情况。
+    cat > "$NGINX_CONF" << EOF
+server {
+    listen 80;
+    server_name ${PANEL_HOST};
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ${PANEL_HOST};
+
+    ssl_certificate /etc/letsencrypt/live/${PANEL_HOST}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${PANEL_HOST}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_set_header   Upgrade           \$http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+        proxy_read_timeout 3600s;
+    }
+}
+EOF
+    info "已写入 HTTPS Nginx 配置 ✓"
+}
+
 write_nginx_config
 
 if ! nginx -t 2>/tmp/easy_vpn_nginx_test.log; then
@@ -228,7 +263,22 @@ EOF
     fi
 
     if [ -f "/etc/letsencrypt/live/${PANEL_HOST}/fullchain.pem" ]; then
-        info "SSL 证书已存在，跳过申请"
+        info "SSL 证书已存在，写入 HTTPS 配置"
+        write_ssl_nginx_config
+        if ! nginx -t 2>/tmp/easy_vpn_nginx_ssl_test.log; then
+            echo -e "${RED}===== HTTPS Nginx 校验失败，详细错误如下 =====${NC}"
+            cat /tmp/easy_vpn_nginx_ssl_test.log
+            if [ -n "${BACKUP_CONF:-}" ] && [ -f "$BACKUP_CONF" ]; then
+                cp "$BACKUP_CONF" "$NGINX_CONF"
+                nginx -t && nginx -s reload
+                die "HTTPS Nginx 配置错误，已恢复备份：$BACKUP_CONF"
+            else
+                rm -f "$NGINX_CONF"
+                die "HTTPS Nginx 配置错误，已回滚（无备份可恢复）"
+            fi
+        fi
+        nginx -s reload
+        info "Nginx HTTPS 配置已生效 ✓"
     elif command -v certbot &>/dev/null; then
         # 构造邮箱参数：优先读 .env 的 ADMIN_EMAIL，为空则显式匿名注册，避免伪造邮箱
         if [ -n "${ADMIN_EMAIL:-}" ]; then
@@ -242,6 +292,10 @@ EOF
         if certbot --nginx -d "$PANEL_HOST" --non-interactive --agree-tos \
             "${CERTBOT_EMAIL_ARGS[@]}"; then
             info "SSL 证书申请成功 ✓"
+            write_ssl_nginx_config
+            nginx -t
+            nginx -s reload
+            info "Nginx HTTPS 配置已生效 ✓"
         else
             echo -e "${RED}===== SSL 证书申请失败，常见原因排查 =====${NC}"
             echo "  1) DNS 未解析：dig +short $PANEL_HOST  应返回本机公网 IP"
