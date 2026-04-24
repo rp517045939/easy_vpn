@@ -9,13 +9,8 @@
     <!-- 顶栏 -->
     <header class="relative z-10 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-btn">
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-          </div>
-          <span class="text-2xl font-extrabold tracking-tight text-slate-900">
-            EASY_VPN <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">NEXUS</span>
-          </span>
+        <div class="flex items-center">
+          <img :src="logoUrl" alt="EASY_VPN Nexus" class="h-10 w-auto" />
         </div>
         <div class="flex items-center gap-6">
           <div class="flex items-center gap-2 bg-indigo-50 px-4 py-2 rounded-full border border-indigo-100">
@@ -475,6 +470,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { clientApi, rulesApi, statsApi, portsApi, trafficApi, configApi } from '../api/index'
+import logoUrl from '../assets/logo.svg'
 
 function fmtBytes(n) {
   if (!n || n === 0) return '0 B'

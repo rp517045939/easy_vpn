@@ -9,12 +9,7 @@
     <div class="relative z-10 w-full max-w-md px-4 sm:px-0 perspective-[2000px]">
       <div class="card p-8 sm:p-10 transform-gpu transition-transform duration-500 hover:rotate-x-[2deg] hover:rotate-y-[-2deg]">
         <div class="flex flex-col items-center mb-8">
-          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-btn mb-4">
-            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-          </div>
-          <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 text-center">
-            EASY_VPN <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">NEXUS</span>
-          </h2>
+          <img :src="logoUrl" alt="EASY_VPN Nexus" class="h-14 w-auto mb-4" />
           <p class="text-slate-500 mt-2 font-medium">登录以管理您的内网穿透服务</p>
         </div>
 
@@ -67,6 +62,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import logoUrl from '../assets/logo.svg'
 
 const router = useRouter()
 const auth   = useAuthStore()

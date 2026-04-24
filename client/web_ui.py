@@ -40,9 +40,13 @@ _HTML = r"""<!DOCTYPE html>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
          background: #f1f5f9; color: #0f172a; min-height: 100vh; }
   header { background: #fff; border-bottom: 1px solid #e2e8f0; padding: 0 24px;
-           height: 56px; display: flex; align-items: center; gap: 12px;
+           min-height: 60px; display: flex; align-items: center; gap: 12px;
            position: sticky; top: 0; z-index: 10; }
-  .logo { font-size: 17px; font-weight: 700; color: #4f46e5; letter-spacing: -.3px; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand-mark { width:38px; height:38px; flex-shrink:0; }
+  .brand-copy { display:flex; flex-direction:column; line-height:1.05; }
+  .logo { font-size: 16px; font-weight: 800; color: #0f172a; letter-spacing: 0; }
+  .logo-sub { margin-top:3px; font-size:10px; font-weight:700; color:#64748b; letter-spacing:.12em; text-transform:uppercase; }
   .dot { width: 8px; height: 8px; border-radius: 50%; margin-left: auto; flex-shrink: 0; }
   .dot.connected    { background: #10b981; box-shadow: 0 0 8px rgba(16,185,129,.6); }
   .dot.connecting   { background: #f59e0b; animation: pulse 1s infinite; }
@@ -124,7 +128,19 @@ _HTML = r"""<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <span class="logo">easy_vpn client</span>
+  <div class="brand" aria-label="easy_vpn client">
+    <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="clientMark" x1="4" y1="4" x2="36" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+      <rect x="1" y="1" width="38" height="38" rx="10" fill="white" stroke="#E2E8F0" stroke-width="2"/>
+      <path d="M20 6.5L31 11V19.2C31 26.2 26.5 31.7 20 34C13.5 31.7 9 26.2 9 19.2V11L20 6.5Z" fill="url(#clientMark)"/>
+      <path d="M14 20H18.2L16.8 27L26 16.5H21.8L23.2 10L14 20Z" fill="white"/>
+      <path d="M7.5 14.5H3.5M36.5 14.5H32.5M7.5 25.5H3.5M36.5 25.5H32.5" stroke="#818CF8" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <span class="brand-copy">
+      <span class="logo">easy_vpn</span>
+      <span class="logo-sub">client console</span>
+    </span>
+  </div>
   <span class="dot disconnected" id="hDot"></span>
   <span class="status-text disconnected" id="hStatus">加载中…</span>
 </header>
@@ -378,7 +394,11 @@ _LOGIN_HTML = r"""<!DOCTYPE html>
     box-shadow: 0 20px 50px rgba(15, 23, 42, .08);
     padding: 28px;
   }
-  .title { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+  .brand-mark { width:48px; height:48px; flex-shrink:0; }
+  .brand-copy { display:flex; flex-direction:column; line-height:1.05; }
+  .title { font-size: 23px; font-weight: 800; color:#0f172a; letter-spacing:0; }
+  .kicker { margin-top:4px; font-size:10px; font-weight:800; color:#64748b; letter-spacing:.14em; text-transform:uppercase; }
   .sub { color: #64748b; font-size: 14px; margin-bottom: 20px; }
   label { display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:8px; text-transform:uppercase; letter-spacing:.04em; }
   input {
@@ -397,7 +417,19 @@ _LOGIN_HTML = r"""<!DOCTYPE html>
 </head>
 <body>
   <div class="card">
-    <div class="title">easy_vpn client</div>
+    <div class="brand" aria-label="easy_vpn client">
+      <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="loginMark" x1="4" y1="4" x2="36" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+        <rect x="1" y="1" width="38" height="38" rx="10" fill="white" stroke="#E2E8F0" stroke-width="2"/>
+        <path d="M20 6.5L31 11V19.2C31 26.2 26.5 31.7 20 34C13.5 31.7 9 26.2 9 19.2V11L20 6.5Z" fill="url(#loginMark)"/>
+        <path d="M14 20H18.2L16.8 27L26 16.5H21.8L23.2 10L14 20Z" fill="white"/>
+        <path d="M7.5 14.5H3.5M36.5 14.5H32.5M7.5 25.5H3.5M36.5 25.5H32.5" stroke="#818CF8" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div class="brand-copy">
+        <div class="title">easy_vpn</div>
+        <div class="kicker">client console</div>
+      </div>
+    </div>
     <div class="sub">请输入本次启动生成的访问密码</div>
     <label for="password">访问密码</label>
     <input id="password" type="password" placeholder="请输入密码" autofocus />
