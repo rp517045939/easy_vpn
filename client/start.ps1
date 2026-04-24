@@ -17,6 +17,36 @@ function Write-Info  { param($msg) Write-Host "[INFO]  $msg" -ForegroundColor Gr
 function Write-Warn  { param($msg) Write-Host "[WARN]  $msg" -ForegroundColor Yellow }
 function Write-Err   { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
+function Ensure-VenvPip {
+    if (-not (Test-Path $venvPython)) { return $false }
+
+    & $venvPython -m pip --version *> $null
+    if ($LASTEXITCODE -eq 0) { return $true }
+
+    Write-Warn "虚拟环境缺少 pip，尝试自动修复..."
+    & $venvPython -m ensurepip --upgrade *> $null
+    if ($LASTEXITCODE -eq 0) {
+        & $venvPython -m pip --version *> $null
+        if ($LASTEXITCODE -eq 0) { return $true }
+    }
+
+    Write-Warn "修复失败，重新创建虚拟环境..."
+    if (Test-Path $VenvDir) {
+        Remove-Item -Recurse -Force $VenvDir
+    }
+
+    & $python -m venv $VenvDir
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $venvPython)) {
+        return $false
+    }
+
+    & $venvPython -m ensurepip --upgrade *> $null
+    if ($LASTEXITCODE -ne 0) { return $false }
+
+    & $venvPython -m pip --version *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
 # ── 检查 Python ──────────────────────────────────────────────────────────
 $python = $null
 foreach ($cmd in @("python", "python3")) {
@@ -71,6 +101,12 @@ if (-not (Test-Path $venvPython)) {
         Read-Host "按 Enter 退出"
         exit 1
     }
+}
+
+if (-not (Ensure-VenvPip)) {
+    Write-Err "虚拟环境 pip 初始化失败，请重新安装 Python，并确认安装时启用了 pip"
+    Read-Host "按 Enter 退出"
+    exit 1
 }
 
 # ── 检查依赖 ─────────────────────────────────────────────────────────────

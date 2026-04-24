@@ -65,6 +65,13 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
     )
 )
 
+call :EnsureVenvPip
+if errorlevel 1 (
+    echo [ERROR] 虚拟环境 pip 初始化失败，请重新安装 Python，并确认安装时启用了 pip
+    pause
+    exit /b 1
+)
+
 :: ── 检查依赖 ─────────────────────────────────────────────────────────────
 set "REQS=%SCRIPT_DIR%requirements.txt"
 set "REQS_STAMP=%VENV_DIR%\.reqs_installed"
@@ -103,3 +110,27 @@ if errorlevel 1 (
     pause >nul
 )
 endlocal
+exit /b 0
+
+:EnsureVenvPip
+"%VENV_DIR%\Scripts\python.exe" -m pip --version >nul 2>&1
+if not errorlevel 1 exit /b 0
+
+echo [WARN]  虚拟环境缺少 pip，尝试自动修复...
+"%VENV_DIR%\Scripts\python.exe" -m ensurepip --upgrade >nul 2>&1
+if not errorlevel 1 (
+    "%VENV_DIR%\Scripts\python.exe" -m pip --version >nul 2>&1
+    if not errorlevel 1 exit /b 0
+)
+
+echo [WARN]  修复失败，重新创建虚拟环境...
+if exist "%VENV_DIR%" rd /s /q "%VENV_DIR%"
+python -m venv "%VENV_DIR%"
+if errorlevel 1 exit /b 1
+if not exist "%VENV_DIR%\Scripts\python.exe" exit /b 1
+
+"%VENV_DIR%\Scripts\python.exe" -m ensurepip --upgrade >nul 2>&1
+if errorlevel 1 exit /b 1
+
+"%VENV_DIR%\Scripts\python.exe" -m pip --version >nul 2>&1
+exit /b %ERRORLEVEL%
