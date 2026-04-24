@@ -83,8 +83,10 @@ $settings = New-ScheduledTaskSettingsSet `
     -RestartInterval       (New-TimeSpan -Minutes 1) `
     -StartWhenAvailable    `
     -RunOnlyIfNetworkAvailable:$false `
-    -StopIfGoingOnBatteries:$false `
-    -DisallowStartIfOnBatteries:$false
+    -DontStopIfGoingOnBatteries
+
+# PS 5.1 无对应参数，直接设属性来允许电池模式下启动
+$settings.DisallowStartIfOnBatteries = $false
 
 # 删除旧任务（如果存在）再重新注册
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
