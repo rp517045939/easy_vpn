@@ -27,11 +27,10 @@
 - 项目：`easy_vpn`
 - 服务端部署方式：`Docker Compose`
 - Nginx 在宿主机上做反向代理。
-- 项目包含一键部署脚本，当前文档中可见入口是：
-  - `bash deploy/install.sh`
-  - `bash deploy/install.sh --test-skip-ssl`
-- 仓库中当前可见的服务端部署脚本文件为：
-  - `deploy/server_deploy.sh`
+- 一键部署脚本入口（根目录薄封装 → 实际逻辑在 `deploy/server_deploy.sh`）：
+  - `sudo bash server_deploy.sh`              # 正式部署（含 SSL）
+  - `sudo bash server_deploy.sh --skip-ssl`   # 测试环境跳过 SSL
+- `deploy/install.sh` 已废弃，不再使用。
 
 ## 项目关键约束
 

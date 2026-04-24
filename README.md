@@ -74,10 +74,10 @@ npm run build        # 产物输出到 server/static/
 
 ```bash
 # 正式环境（含 SSL 证书申请）
-sudo bash deploy/server_deploy.sh
+sudo bash server_deploy.sh
 
 # 测试环境（跳过 SSL）
-sudo bash deploy/server_deploy.sh --skip-ssl
+sudo bash server_deploy.sh --skip-ssl
 ```
 
 脚本会自动完成：环境检查 → 构建镜像 → 启动容器 → 写入 Nginx 配置 → 申请 SSL 证书 → 验证现有服务未受影响。
@@ -97,7 +97,7 @@ docker logs -f easy_vpn
 docker compose down
 
 # 更新（拉代码后重新部署）
-git pull && sudo bash deploy/server_deploy.sh
+git pull && sudo bash server_deploy.sh
 ```
 
 如果服务器上的项目目录做过手工修改，`git pull` 可能会被阻止。此时建议先备份本地改动，再更新：
@@ -105,7 +105,7 @@ git pull && sudo bash deploy/server_deploy.sh
 ```bash
 git stash push -u -m "pre-deploy backup"
 git pull --ff-only origin main
-sudo bash deploy/server_deploy.sh
+sudo bash server_deploy.sh
 ```
 
 ### Nginx 配置说明
