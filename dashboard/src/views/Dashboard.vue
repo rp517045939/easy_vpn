@@ -41,7 +41,8 @@
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
           </div>
           <div>
-            <div class="text-4xl font-bold text-slate-900 mb-1">{{ stats.online_clients ?? '-' }}</div>
+            <div v-if="isBootstrapping" class="h-10 w-16 rounded-xl bg-slate-200 animate-pulse mb-1"></div>
+            <div v-else class="text-4xl font-bold text-slate-900 mb-1">{{ stats.online_clients ?? '-' }}</div>
             <div class="text-sm font-semibold text-slate-500 uppercase tracking-wider">在线设备</div>
           </div>
         </div>
@@ -50,7 +51,8 @@
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
           </div>
           <div>
-            <div class="text-4xl font-bold text-slate-900 mb-1">{{ stats.http_rules ?? '-' }}</div>
+            <div v-if="isBootstrapping" class="h-10 w-16 rounded-xl bg-slate-200 animate-pulse mb-1"></div>
+            <div v-else class="text-4xl font-bold text-slate-900 mb-1">{{ stats.http_rules ?? '-' }}</div>
             <div class="text-sm font-semibold text-slate-500 uppercase tracking-wider">HTTP 隧道</div>
           </div>
         </div>
@@ -59,14 +61,36 @@
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
           </div>
           <div>
-            <div class="text-4xl font-bold text-slate-900 mb-1">{{ stats.tcp_rules ?? '-' }}</div>
+            <div v-if="isBootstrapping" class="h-10 w-16 rounded-xl bg-slate-200 animate-pulse mb-1"></div>
+            <div v-else class="text-4xl font-bold text-slate-900 mb-1">{{ stats.tcp_rules ?? '-' }}</div>
             <div class="text-sm font-semibold text-slate-500 uppercase tracking-wider">TCP 隧道</div>
           </div>
         </div>
       </div>
 
       <!-- 设备列表 -->
-      <div v-if="allDevices.length > 0" class="mb-12">
+      <div v-if="isBootstrapping" class="mb-12">
+        <div class="mb-6">
+          <h3 class="text-2xl font-bold text-slate-900">设备概览</h3>
+          <p class="text-slate-500 mt-1">正在加载设备与流量数据...</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="i in 3" :key="i" class="card p-5">
+            <div class="animate-pulse space-y-4">
+              <div class="flex items-center justify-between">
+                <div class="h-5 w-24 rounded bg-slate-200"></div>
+                <div class="h-5 w-12 rounded-full bg-slate-200"></div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="h-16 rounded-2xl bg-slate-100"></div>
+                <div class="h-16 rounded-2xl bg-slate-100"></div>
+              </div>
+              <div class="h-4 w-2/3 rounded bg-slate-100"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="allDevices.length > 0" class="mb-12">
         <div class="mb-6">
           <h3 class="text-2xl font-bold text-slate-900">设备概览</h3>
           <p class="text-slate-500 mt-1">点击卡片查看详细流量历史</p>
@@ -135,7 +159,21 @@
                 <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">操作</th>
               </tr>
             </thead>
-            <TransitionGroup name="list" tag="tbody" class="divide-y divide-slate-100">
+            <tbody v-if="isBootstrapping" class="divide-y divide-slate-100">
+              <tr v-for="i in 4" :key="`skeleton-${i}`">
+                <td colspan="7" class="py-4 px-6">
+                  <div class="animate-pulse flex items-center gap-4">
+                    <div class="h-5 w-14 rounded-md bg-slate-200"></div>
+                    <div class="h-4 w-24 rounded bg-slate-200"></div>
+                    <div class="h-4 w-28 rounded bg-slate-100"></div>
+                    <div class="h-4 w-32 rounded bg-slate-100"></div>
+                    <div class="h-4 w-20 rounded bg-slate-100"></div>
+                    <div class="h-4 w-16 rounded bg-slate-100"></div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+            <TransitionGroup v-else name="list" tag="tbody" class="divide-y divide-slate-100">
               <tr v-if="rules.length === 0" key="empty">
                 <td colspan="7" class="py-16 text-center">
                   <div class="flex flex-col items-center justify-center text-slate-400">
@@ -472,6 +510,7 @@ const stats              = ref({})
 const availablePorts     = ref([])
 const clientDropdownOpen = ref(false)
 const httpDomain         = ref('')
+const isBootstrapping    = ref(true)
 
 // v-click-outside 指令
 const vClickOutside = {
@@ -639,8 +678,12 @@ function logout() {
 
 let timer
 onMounted(async () => {
-  try { const cfg = await configApi.get(); httpDomain.value = cfg.http_domain } catch {}
-  await refresh()
+  isBootstrapping.value = true
+  const [cfgResult] = await Promise.allSettled([configApi.get(), refresh()])
+  if (cfgResult.status === 'fulfilled') {
+    httpDomain.value = cfgResult.value.http_domain
+  }
+  isBootstrapping.value = false
   timer = setInterval(refresh, 10000)
 })
 onUnmounted(() => clearInterval(timer))
