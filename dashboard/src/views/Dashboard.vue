@@ -301,11 +301,12 @@
 
             <template v-if="modal.rule.type === 'http'">
               <div>
-                <label class="label">子域名</label>
-                <div class="relative">
-                  <input v-model="modal.rule.subdomain" :placeholder="`如 nas.${httpDomain}`" class="input-field font-mono text-sm" />
+                <label class="label">子域名前缀</label>
+                <div class="flex items-center">
+                  <input v-model="modal.rule.subdomain" placeholder="如 nas" class="input-field font-mono text-sm rounded-r-none flex-1" />
+                  <span class="px-3 h-10 flex items-center bg-slate-100 border border-l-0 border-slate-200 rounded-r-xl text-sm font-mono text-slate-500 whitespace-nowrap">.{{ httpDomain }}</span>
                 </div>
-                <p class="mt-1 text-xs text-slate-400">填写完整域名，如 <code class="bg-slate-100 px-1 rounded">nas.{{ httpDomain }}</code></p>
+                <p class="mt-1 text-xs text-slate-400">最终访问地址：<code class="bg-slate-100 px-1 rounded">{{ modal.rule.subdomain || 'xxx' }}.{{ httpDomain }}</code></p>
               </div>
             </template>
             <template v-else>
@@ -570,9 +571,20 @@ function defaultRule() {
 }
 
 function openModal(rule = null) {
-  modal.value.error   = ''
-  modal.value.saving  = false
-  modal.value.rule    = rule ? { ...rule } : defaultRule()
+  modal.value.error  = ''
+  modal.value.saving = false
+  if (rule) {
+    const r = { ...rule }
+    if (r.type === 'http' && httpDomain.value && r.subdomain) {
+      const suffix = '.' + httpDomain.value
+      if (r.subdomain.endsWith(suffix)) {
+        r.subdomain = r.subdomain.slice(0, -suffix.length)
+      }
+    }
+    modal.value.rule = r
+  } else {
+    modal.value.rule = defaultRule()
+  }
   modal.value.visible = true
   if (!rule) loadAvailablePorts()
 }
@@ -585,11 +597,15 @@ async function saveRule() {
   modal.value.saving = true
   modal.value.error  = ''
   try {
-    if (modal.value.rule.id) {
-      const { id, ...updates } = modal.value.rule
+    const rule = { ...modal.value.rule }
+    if (rule.type === 'http' && httpDomain.value && rule.subdomain) {
+      rule.subdomain = rule.subdomain.trim() + '.' + httpDomain.value
+    }
+    if (rule.id) {
+      const { id, ...updates } = rule
       await rulesApi.update(id, updates)
     } else {
-      await rulesApi.add(modal.value.rule)
+      await rulesApi.add(rule)
     }
     modal.value.visible  = false
     clientDropdownOpen.value = false
