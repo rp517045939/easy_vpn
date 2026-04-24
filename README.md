@@ -110,7 +110,7 @@ sudo bash server_deploy.sh
 
 ### Nginx 配置说明
 
-部署脚本自动写入 `/etc/nginx/sites-enabled/easy_vpn.conf`。如需手动配置或新增穿透子域名，参考 `deploy/nginx/easy_vpn.conf`：
+部署脚本自动写入 `/etc/nginx/sites-enabled/easy_vpn.conf`。如需手动新增穿透子域名，参考下面的配置模板：
 
 ```nginx
 # 新增穿透子域名（每台设备一段，复制以下模板）

@@ -187,7 +187,7 @@ easy_vpn/
 │   ├── vite.config.js       # 开发代理 + 构建输出到 server/static
 │   └── Dockerfile
 │
-├── deploy/nginx/easy_vpn.conf  # Nginx 配置参考
+├── server_deploy.sh            # 服务端一键部署脚本（Docker + Nginx + SSL）
 ├── docker-compose.yml          # 服务端一键部署
 ├── .env.example                # 环境变量模板
 └── easy_vpn_project.md         # 本文件
