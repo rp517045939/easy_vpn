@@ -2,6 +2,7 @@
 Client 本地 Web 管理界面，默认监听 http://localhost:7070
 """
 import asyncio
+import errno
 import json
 import logging
 from pathlib import Path
@@ -591,7 +592,19 @@ async def start_web_ui(host: str = "127.0.0.1", port: int = 7070):
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, host, port)
-    await site.start()
+    try:
+        await site.start()
+    except OSError as exc:
+        await runner.cleanup()
+        if exc.errno == errno.EADDRINUSE:
+            logger.error(
+                "Web UI port %s:%s is already in use. VPN client will keep running without Web UI. "
+                "Stop the existing process or restart with --ui-port <port>.",
+                host,
+                port,
+            )
+            return
+        raise
     logger.info("Web UI running at http://%s:%s", host, port)
     logger.info(
         "Local admin UI credentials: url=http://%s:%s password=%s",
