@@ -268,6 +268,8 @@ sudo journalctl -u easy_vpn_client -f
 | 服务端端口（TCP）| 如 `2222`，外部通过 `server:2222` 访问 |
 | 服务端端口（RDP）| 如 `2233`，外部 RDP 客户端连接 `vpn.example.com:2233` |
 
+管理面板会推荐 `.env` 里的 `TCP_PORT_MIN`-`TCP_PORT_MAX` 端口段，但 TCP/RDP 规则可以手动填写 `TCP_PORT_ALLOW_MIN`-`TCP_PORT_ALLOW_MAX` 内的任意未占用端口。例如要用 `18789` 暴露 SSH，可以在服务端端口填 `18789`。Docker 部署默认已映射 `18789/tcp`；如果使用其他自定义端口，需要在 `docker-compose.yml` 的 `ports` 中额外映射，并在云服务器安全组/防火墙放行。
+
 规则保存后立即下发给对应 Client，无需重启任何服务。
 
 ### 典型配置示例
@@ -296,6 +298,12 @@ sudo journalctl -u easy_vpn_client -f
 
 ```bash
 ssh -p 2222 user@vpn.example.com
+```
+
+如果改用自定义端口 `18789`，先确保云服务器已放行该端口，然后在规则里填写服务端端口 `18789`：
+
+```bash
+ssh -p 18789 user@vpn.example.com
 ```
 
 **RDP 远程桌面到 Windows / Ubuntu：**
@@ -352,5 +360,6 @@ Client 本地测试时，将 `config.yml` 中的 `url` 改为 `ws://localhost:80
 | 端口 | 用途 |
 |------|------|
 | 8080 | Server HTTP（仅宿主机 Nginx 访问，不对外开放） |
-| 2200–2299/tcp | TCP 隧道端口段，对外开放 |
-| 2200–2299/udp | RDP UDP 加速端口段，对外开放 |
+| 2200–2299/tcp | 默认推荐 TCP 隧道端口段，对外开放 |
+| 2200–2299/udp | 默认推荐 RDP UDP 加速端口段，对外开放 |
+| 自定义 TCP 端口 | 可在规则中手动填写；Docker 部署需额外 ports 映射，云安全组/防火墙也要放行 |

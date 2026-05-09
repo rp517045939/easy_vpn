@@ -315,10 +315,22 @@
             </template>
             <template v-else>
               <div>
-                <label class="label">服务器端口 (2200-2299)</label>
-                <select v-model.number="modal.rule.server_port" class="input-field font-mono text-sm">
-                  <option v-for="p in availablePorts" :key="p" :value="p">{{ p }}</option>
-                </select>
+                <label class="label">服务器端口</label>
+                <input
+                  v-model.number="modal.rule.server_port"
+                  type="number"
+                  :min="tcpPortAllowMin"
+                  :max="tcpPortAllowMax"
+                  list="availableTcpPorts"
+                  placeholder="如 18789"
+                  class="input-field font-mono text-sm"
+                />
+                <datalist id="availableTcpPorts">
+                  <option v-for="p in availablePorts" :key="p" :value="p" />
+                </datalist>
+                <p class="mt-1 text-xs text-slate-400">
+                  推荐 {{ tcpPortMin }}-{{ tcpPortMax }}；也可填写 {{ tcpPortAllowMin }}-{{ tcpPortAllowMax }} 内未占用端口。
+                </p>
                 <p v-if="modal.rule.type === 'rdp'" class="mt-1 text-xs text-slate-400">
                   RDP 连接地址：<code class="bg-slate-100 px-1 rounded">{{ tcpHost }}:{{ modal.rule.server_port || '端口' }}</code>
                 </p>
@@ -514,6 +526,10 @@ const stats              = ref({})
 const availablePorts     = ref([])
 const clientDropdownOpen = ref(false)
 const httpDomain         = ref('')
+const tcpPortMin         = ref(2200)
+const tcpPortMax         = ref(2299)
+const tcpPortAllowMin    = ref(1)
+const tcpPortAllowMax    = ref(65535)
 const isBootstrapping    = ref(true)
 
 // v-click-outside 指令
@@ -630,6 +646,12 @@ async function saveRule() {
   modal.value.error  = ''
   try {
     const rule = { ...modal.value.rule }
+    if (rule.type !== 'http') {
+      rule.server_port = Number(rule.server_port)
+    }
+    if (rule.local_port !== '') {
+      rule.local_port = Number(rule.local_port)
+    }
     if (rule.type === 'http' && httpDomain.value && rule.subdomain) {
       rule.subdomain = rule.subdomain.trim() + '.' + httpDomain.value
     }
@@ -735,6 +757,10 @@ onMounted(async () => {
   const [cfgResult] = await Promise.allSettled([configApi.get(), refresh()])
   if (cfgResult.status === 'fulfilled') {
     httpDomain.value = cfgResult.value.http_domain
+    tcpPortMin.value = cfgResult.value.tcp_port_min ?? tcpPortMin.value
+    tcpPortMax.value = cfgResult.value.tcp_port_max ?? tcpPortMax.value
+    tcpPortAllowMin.value = cfgResult.value.tcp_port_allow_min ?? tcpPortAllowMin.value
+    tcpPortAllowMax.value = cfgResult.value.tcp_port_allow_max ?? tcpPortAllowMax.value
   }
   isBootstrapping.value = false
   timer = setInterval(refresh, 10000)

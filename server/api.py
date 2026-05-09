@@ -158,7 +158,13 @@ async def delete_rule(rule_id: str, user=Depends(get_current_user)):
 @router.get("/config")
 async def get_config():
     """返回前端需要的公开配置（无需登录）。"""
-    return {"http_domain": settings.http_domain}
+    return {
+        "http_domain": settings.http_domain,
+        "tcp_port_min": settings.tcp_port_min,
+        "tcp_port_max": settings.tcp_port_max,
+        "tcp_port_allow_min": settings.tcp_port_allow_min,
+        "tcp_port_allow_max": settings.tcp_port_allow_max,
+    }
 
 
 # ------------------------------------------------------------------ 端口

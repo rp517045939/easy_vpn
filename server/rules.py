@@ -107,8 +107,12 @@ class RulesManager:
             if app_protocol and app_protocol not in ("tcp", "rdp"):
                 raise ValueError(f"Invalid app_protocol: {app_protocol}")
             port = rule["server_port"]
-            if not (settings.tcp_port_min <= port <= settings.tcp_port_max):
-                raise ValueError(f"server_port must be in {settings.tcp_port_min}-{settings.tcp_port_max}")
+            if not isinstance(port, int):
+                raise ValueError("server_port must be an integer")
+            if not (settings.tcp_port_allow_min <= port <= settings.tcp_port_allow_max):
+                raise ValueError(
+                    f"server_port must be in {settings.tcp_port_allow_min}-{settings.tcp_port_allow_max}"
+                )
             # 端口唯一性检查
             for r in self._data["rules"]:
                 if r["type"] == "tcp" and r["server_port"] == port and r.get("id") != exclude_id:

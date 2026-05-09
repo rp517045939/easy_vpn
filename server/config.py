@@ -18,9 +18,13 @@ class Settings(BaseSettings):
     # HTTP 隧道子域名的根域名（UI 中显示的后缀，如 .vpn.ruanpengpeng.cn）
     http_domain: str = "vpn.ruanpengpeng.cn"
 
-    # TCP 隧道端口范围
+    # TCP 隧道推荐端口范围，用于自动分配和 UI 推荐列表
     tcp_port_min: int = 2200
     tcp_port_max: int = 2299
+
+    # TCP 隧道允许手动填写的服务端端口范围
+    tcp_port_allow_min: int = 1
+    tcp_port_allow_max: int = 65535
 
     # 心跳间隔（秒）
     heartbeat_interval: int = 30
