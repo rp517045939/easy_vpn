@@ -155,12 +155,14 @@ if [ -f "$NGINX_CONF" ]; then
 fi
 
 write_nginx_config() {
+    local tunnel_domain="${HTTP_DOMAIN:-$PANEL_HOST}"
+    local server_names="${PANEL_HOST} *.${tunnel_domain}"
     if [ "$SKIP_SSL" = true ]; then
         # 测试环境：HTTP only
         cat > "$NGINX_CONF" << EOF
 server {
     listen 80;
-    server_name ${PANEL_HOST:-_};
+    server_name ${server_names:-_};
     location / {
         proxy_pass         http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -179,7 +181,7 @@ EOF
         cat > "$NGINX_CONF" << EOF
 server {
     listen 80;
-    server_name ${PANEL_HOST};
+    server_name ${server_names};
     location / {
         proxy_pass         http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -200,16 +202,18 @@ EOF
 write_ssl_nginx_config() {
     # 确保证书已存在后，显式写入 80 -> 443 和 443 反代配置。
     # 避免“证书文件存在但 Nginx 仍命中默认自签站点”的情况。
+    local tunnel_domain="${HTTP_DOMAIN:-$PANEL_HOST}"
+    local server_names="${PANEL_HOST} *.${tunnel_domain}"
     cat > "$NGINX_CONF" << EOF
 server {
     listen 80;
-    server_name ${PANEL_HOST};
+    server_name ${server_names};
     return 301 https://\$host\$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name ${PANEL_HOST};
+    server_name ${server_names};
 
     ssl_certificate /etc/letsencrypt/live/${PANEL_HOST}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${PANEL_HOST}/privkey.pem;
