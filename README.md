@@ -11,9 +11,10 @@
   │    ├── vpn.example.com       → easy_vpn 管理面板
   │    └── nas.example.com       → HTTP 隧道 → NAS 内网服务
   │
-  └── TCP/UDP 2200-2299（直连）
-       ├── server:2222           → TCP 隧道 → NAS SSH:22
-       └── server:2233           → RDP 隧道 → Windows/Ubuntu:3389
+  └── TCP/UDP 直连端口
+       ├── server:2222           → TCP 隧道 → NAS SSH:22（推荐端口段）
+       ├── server:2233           → RDP 隧道 → Windows/Ubuntu:3389（推荐端口段）
+       └── server:18789          → TCP 隧道 → Mac SSH:22（自定义端口）
 
 云服务器（easy_vpn Server）
   └── WebSocket 长连接
@@ -60,6 +61,10 @@ nano .env
 | `CLIENT_TOKEN` | Client 注册时使用的共享 token，建议 32 位以上 |
 | `PANEL_HOST` | 管理面板域名，如 `vpn.example.com` |
 | `PORT` | 服务监听端口，默认 `8080` |
+| `TCP_PORT_MIN` / `TCP_PORT_MAX` | 管理面板推荐和自动分配的 TCP/RDP 端口段，默认 `2200`-`2299` |
+| `TCP_PORT_ALLOW_MIN` / `TCP_PORT_ALLOW_MAX` | 允许手动填写的服务端端口范围，默认 `1`-`65535` |
+
+默认 `docker-compose.yml` 已开放 `2200-2299/tcp`、`2200-2299/udp` 和 `18789/tcp`。如果你在规则里填写其他自定义服务端端口，需要同时修改 `docker-compose.yml` 的 `ports`，并在云服务器安全组/防火墙放行对应端口。
 
 ### 3. 构建前端（可选）
 
@@ -362,4 +367,5 @@ Client 本地测试时，将 `config.yml` 中的 `url` 改为 `ws://localhost:80
 | 8080 | Server HTTP（仅宿主机 Nginx 访问，不对外开放） |
 | 2200–2299/tcp | 默认推荐 TCP 隧道端口段，对外开放 |
 | 2200–2299/udp | 默认推荐 RDP UDP 加速端口段，对外开放 |
-| 自定义 TCP 端口 | 可在规则中手动填写；Docker 部署需额外 ports 映射，云安全组/防火墙也要放行 |
+| 18789/tcp | 默认额外开放的自定义 SSH 隧道端口示例 |
+| 其他自定义 TCP 端口 | 可在规则中手动填写；Docker 部署需额外 ports 映射，云安全组/防火墙也要放行 |
