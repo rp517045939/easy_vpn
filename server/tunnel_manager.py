@@ -339,19 +339,23 @@ class TunnelManager:
     async def heartbeat_loop(self) -> None:
         while True:
             await asyncio.sleep(settings.heartbeat_interval)
-            now = time.time()
-            dead = []
-            for client_id, info in list(self._clients.items()):
-                if now - info["last_heartbeat"] > settings.heartbeat_timeout:
-                    logger.warning(f"Client {client_id} heartbeat timeout, marking offline")
-                    dead.append(client_id)
-                else:
-                    try:
-                        await self._send(client_id, encode(MsgType.HEARTBEAT))
-                    except Exception:
-                        dead.append(client_id)
-            for client_id in dead:
-                await self.disconnect(client_id)
+            await self._heartbeat_once()
+
+    async def _heartbeat_once(self) -> None:
+        now = time.time()
+        dead = []
+        for client_id, info in list(self._clients.items()):
+            websocket = info["ws"]
+            if now - info["last_heartbeat"] > settings.heartbeat_timeout:
+                logger.warning(f"Client {client_id} heartbeat timeout, marking offline")
+                dead.append((client_id, websocket))
+            else:
+                try:
+                    await self._send(client_id, encode(MsgType.HEARTBEAT))
+                except Exception:
+                    dead.append((client_id, websocket))
+        for client_id, websocket in dead:
+            await self.disconnect(client_id, websocket=websocket)
 
 
 tunnel_manager = TunnelManager()
